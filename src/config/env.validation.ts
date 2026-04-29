@@ -1,4 +1,4 @@
-const requiredEnvVariables = ['MONGODB_URI'] as const;
+const requiredEnvVariables = ['MONGODB_URI', 'AUTH_TOKEN_SECRET'] as const;
 
 export function validateEnv(config: Record<string, unknown>) {
   const missingVariables = requiredEnvVariables.filter((key) => !config[key]);

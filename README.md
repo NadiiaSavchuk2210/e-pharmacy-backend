@@ -23,6 +23,8 @@ PORT=3000
 CORS_ORIGIN=http://localhost:5173
 MONGODB_URI=mongodb+srv://<username>:<password>@<cluster-url>/?retryWrites=true&w=majority&appName=Cluster0
 MONGODB_DB_NAME=e-pharmacy
+AUTH_TOKEN_SECRET=change-me-to-a-long-random-string
+AUTH_TOKEN_TTL=86400
 ```
 
 ## Install dependencies
@@ -68,6 +70,45 @@ http://localhost:3000/api
 - `GET /api/products?category=Medicine` - filter by category
 - `GET /api/products?name=asp` - filter by product name
 - `GET /api/products/:id` - get one product by public `id`
+- `POST /api/user/register` - register a user with `name`, `email`, `phone`, `password`
+- `POST /api/user/login` - authenticate a user with `email`, `password`
+- `GET /api/user/profile` - get the current user profile with `Authorization: Bearer <token>`
+
+## Authentication flow
+
+`POST /api/user/register` request body:
+
+```json
+{
+  "name": "Nadiia S",
+  "email": "nadiia@example.com",
+  "phone": "+380991112233",
+  "password": "StrongPass1!"
+}
+```
+
+The same response data shape is returned by both `register` and `login`:
+
+```json
+{
+  "statusCode": 201,
+  "message": "Resource created successfully",
+  "data": {
+    "user": {
+      "id": "507f1f77bcf86cd799439011",
+      "name": "Nadiia S",
+      "email": "nadiia@example.com",
+      "phone": "+380991112233",
+      "role": "user"
+    },
+    "token": "<bearer-token>",
+    "tokenType": "Bearer",
+    "expiresIn": 86400
+  }
+}
+```
+
+`login` returns the same `data` object with HTTP status `200`.
 
 ## Response format
 
@@ -86,7 +127,9 @@ Error response:
 ```json
 {
   "statusCode": 400,
-  "message": ["category must be one of the following values: Medicine, Heart, Head, Hand, Leg, Dental Care, Skin Care"],
+  "message": [
+    "category must be one of the following values: Medicine, Heart, Head, Hand, Leg, Dental Care, Skin Care"
+  ],
   "error": "BAD_REQUEST",
   "timestamp": "2026-04-29T00:00:00.000Z",
   "path": "/api/products"
