@@ -28,6 +28,26 @@ export class UserController {
     return this.userService.login(loginUserDto);
   }
 
+  @Post('refresh')
+  @HttpCode(200)
+  refresh(@Req() request: AuthenticatedRequest) {
+    const refreshToken = (request.headers.authorization ?? '').slice(7);
+    return this.userService.refreshAccessToken(refreshToken);
+  }
+
+  @Get('logout')
+  @UseGuards(AuthGuard)
+  logout(@Req() request: AuthenticatedRequest) {
+    const token = request.headers.authorization!.slice(7);
+    return this.userService.logout(token, request.user);
+  }
+
+  @Get('user-info')
+  @UseGuards(AuthGuard)
+  getUserInfo(@Req() request: AuthenticatedRequest) {
+    return this.userService.getUserInfo(request.user);
+  }
+
   @Get('profile')
   @UseGuards(AuthGuard)
   getProfile(@Req() request: AuthenticatedRequest) {
