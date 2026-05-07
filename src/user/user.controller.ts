@@ -53,16 +53,4 @@ export class UserController {
   getProfile(@Req() request: AuthenticatedRequest) {
     return this.userService.getProfile(request.user);
   }
-
-  @Get('user-info')
-  @UseGuards(AuthGuard)
-  getUserInfo(@Req() request: AuthenticatedRequest) {
-    return this.userService.getProfile(request.user);
-  }
-
-  @Get('logout')
-  @UseGuards(AuthGuard)
-  logout(@Req() request: AuthenticatedRequest) {
-    return this.userService.logout(request.token);
-  }
 }

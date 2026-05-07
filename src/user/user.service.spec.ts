@@ -4,7 +4,7 @@ import { getModelToken } from '@nestjs/mongoose';
 import { ConfigService } from '@nestjs/config';
 import { UserService } from './user.service';
 import { User } from './schemas/user.schema';
-import { TokenBlacklistService } from 'src/token-blacklist/token-blacklist.service';
+import { TokenBlacklistService } from '../token-blacklist/token-blacklist.service';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

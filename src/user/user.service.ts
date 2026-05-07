@@ -6,7 +6,6 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { ConfigService } from '@nestjs/config';
 import {
-  createHash,
   createHmac,
   randomBytes,
   timingSafeEqual,
@@ -17,33 +16,21 @@ import { promisify } from 'util';
 import { LoginUserDto } from './dto/login-user.dto';
 import { RegisterUserDto } from './dto/register-user.dto';
 import { User, type UserDocument } from './schemas/user.schema';
-import { AuthenticatedUser } from './types/authenticated-request.type';
+import { TokenBlacklistService } from '../token-blacklist/token-blacklist.service';
+import type {
+  AuthenticatedUser,
+  AuthResponse,
+} from './types/authenticated-request.type';
 
 const scrypt = promisify(scryptCallback);
 
-type SafeUser = {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  role: string;
-};
-
-type AuthResponse = {
-  user: SafeUser;
-  token: string;
-  tokenType: 'Bearer';
-  expiresIn: number;
-};
-
 @Injectable()
 export class UserService {
-  private readonly revokedTokenExpirations = new Map<string, number>();
-
   constructor(
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
     private readonly configService: ConfigService,
+    private readonly tokenBlacklistService: TokenBlacklistService,
   ) {}
 
   async register(registerUserDto: RegisterUserDto): Promise<AuthResponse> {
@@ -98,32 +85,39 @@ export class UserService {
     };
   }
 
-  logout(token: string) {
-    const authenticatedUser = this.verifyToken(token);
-    this.revokedTokenExpirations.set(
-      this.hashToken(token),
-      authenticatedUser.exp,
-    );
-    this.removeExpiredRevokedTokens();
-
+  getUserInfo(authenticatedUser: AuthenticatedUser) {
     return {
-      expiresAt: new Date(authenticatedUser.exp * 1000).toISOString(),
-      message: 'Logout successful. Remove the token on the client.',
+      id: authenticatedUser.sub,
+      name: authenticatedUser.name,
+      email: authenticatedUser.email,
+    };
+  }
+
+  logout(token: string, authenticatedUser = this.verifyToken(token)) {
+    this.tokenBlacklistService.add(token, authenticatedUser.exp);
+    return {
+      message: 'Successfully logged out',
     };
   }
 
   verifyToken(token: string): AuthenticatedUser {
-    if (this.isTokenRevoked(token)) {
+    if (this.tokenBlacklistService.isBlacklisted(token)) {
       throw new UnauthorizedException('Authentication token has been revoked');
     }
 
-    const [payloadPart, signaturePart] = token.split('.');
+    const tokenParts = token.split('.');
 
-    if (!payloadPart || !signaturePart) {
+    if (tokenParts.length !== 3) {
       throw new UnauthorizedException('Invalid authentication token');
     }
 
-    const expectedSignature = this.sign(payloadPart);
+    const [headerPart, payloadPart, signaturePart] = tokenParts;
+
+    if (!headerPart || !payloadPart || !signaturePart) {
+      throw new UnauthorizedException('Invalid authentication token');
+    }
+
+    const expectedSignature = this.sign(`${headerPart}.${payloadPart}`);
     const receivedSignature = Buffer.from(signaturePart);
     const validSignature = Buffer.from(expectedSignature);
 
@@ -141,6 +135,27 @@ export class UserService {
     }
 
     return parsedPayload;
+  }
+
+  refreshAccessToken(refreshToken: string) {
+    const authenticatedUser = this.verifyToken(refreshToken);
+
+    if (authenticatedUser.type !== 'refresh') {
+      throw new UnauthorizedException('Invalid token type');
+    }
+
+    const tokenTtlSeconds = this.getTokenTtlSeconds();
+    const authToken = this.createToken({
+      ...authenticatedUser,
+      type: 'access',
+      exp: Math.floor(Date.now() / 1000) + tokenTtlSeconds,
+    });
+
+    return {
+      token: authToken,
+      tokenType: 'Bearer' as const,
+      expiresIn: tokenTtlSeconds,
+    };
   }
 
   private async hashPassword(password: string): Promise<string> {
@@ -172,13 +187,23 @@ export class UserService {
 
   private buildAuthResponse(user: UserDocument | (User & { _id: unknown })) {
     const tokenTtlSeconds = this.getTokenTtlSeconds();
-    const authToken = this.createToken({
+    const refreshTokenTtlSeconds = this.getRefreshTokenTtlSeconds();
+    const basePayload = {
       sub: this.extractUserId(user),
       email: user.email,
       name: user.name,
       phone: user.phone,
       role: user.role,
+    };
+    const authToken = this.createToken({
+      ...basePayload,
+      type: 'access',
       exp: Math.floor(Date.now() / 1000) + tokenTtlSeconds,
+    });
+    const refreshToken = this.createToken({
+      ...basePayload,
+      type: 'refresh',
+      exp: Math.floor(Date.now() / 1000) + refreshTokenTtlSeconds,
     });
 
     return {
@@ -190,18 +215,22 @@ export class UserService {
         role: user.role,
       },
       token: authToken,
+      refreshToken,
       tokenType: 'Bearer' as const,
       expiresIn: tokenTtlSeconds,
     };
   }
 
   private createToken(payload: AuthenticatedUser): string {
+    const headerPart = Buffer.from(
+      JSON.stringify({ alg: 'HS256', typ: 'JWT' }),
+    ).toString('base64url');
     const payloadPart = Buffer.from(JSON.stringify(payload)).toString(
       'base64url',
     );
-    const signature = this.sign(payloadPart);
+    const signature = this.sign(`${headerPart}.${payloadPart}`);
 
-    return `${payloadPart}.${signature}`;
+    return `${headerPart}.${payloadPart}.${signature}`;
   }
 
   private sign(payloadPart: string): string {
@@ -218,13 +247,27 @@ export class UserService {
     const tokenTtl = this.configService.get<string>('AUTH_TOKEN_TTL');
 
     if (!tokenTtl) {
-      return 60 * 60 * 24;
+      return 60 * 60;
     }
 
     const parsedTokenTtl = Number.parseInt(tokenTtl, 10);
 
     return Number.isNaN(parsedTokenTtl) || parsedTokenTtl <= 0
-      ? 60 * 60 * 24
+      ? 60 * 60
+      : parsedTokenTtl;
+  }
+
+  private getRefreshTokenTtlSeconds(): number {
+    const tokenTtl = this.configService.get<string>('AUTH_REFRESH_TOKEN_TTL');
+
+    if (!tokenTtl) {
+      return 60 * 60 * 24 * 7;
+    }
+
+    const parsedTokenTtl = Number.parseInt(tokenTtl, 10);
+
+    return Number.isNaN(parsedTokenTtl) || parsedTokenTtl <= 0
+      ? 60 * 60 * 24 * 7
       : parsedTokenTtl;
   }
 
@@ -240,6 +283,7 @@ export class UserService {
         !parsedPayload.name ||
         !parsedPayload.phone ||
         !parsedPayload.role ||
+        (parsedPayload.type !== 'access' && parsedPayload.type !== 'refresh') ||
         typeof parsedPayload.exp !== 'number'
       ) {
         throw new Error('Token payload is incomplete');
@@ -255,25 +299,5 @@ export class UserService {
     user: UserDocument | (User & { _id: unknown }),
   ): string {
     return String(user._id);
-  }
-
-  private hashToken(token: string): string {
-    return createHash('sha256').update(token).digest('hex');
-  }
-
-  private isTokenRevoked(token: string): boolean {
-    this.removeExpiredRevokedTokens();
-
-    return this.revokedTokenExpirations.has(this.hashToken(token));
-  }
-
-  private removeExpiredRevokedTokens(): void {
-    const now = Math.floor(Date.now() / 1000);
-
-    for (const [tokenHash, expiresAt] of this.revokedTokenExpirations) {
-      if (expiresAt <= now) {
-        this.revokedTokenExpirations.delete(tokenHash);
-      }
-    }
   }
 }
