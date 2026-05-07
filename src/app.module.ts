@@ -6,6 +6,7 @@ import { AppService } from './app.service';
 import { validateEnv } from './config/env.validation';
 import { ProductsModule } from './products/products.module';
 import { UserModule } from './user/user.module';
+import { TokenBlacklistService } from './token-blacklist/token-blacklist.service';
 
 @Module({
   imports: [
@@ -24,6 +25,6 @@ import { UserModule } from './user/user.module';
     UserModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, TokenBlacklistService],
 })
 export class AppModule {}
