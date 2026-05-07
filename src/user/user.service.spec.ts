@@ -200,4 +200,40 @@ describe('UserService', () => {
       }),
     );
   });
+
+  it('revokes the current token on logout', async () => {
+    findOneMock.mockReturnValue({
+      lean: jest.fn().mockResolvedValue(null),
+    });
+    createMock.mockResolvedValue({
+      _id: '507f1f77bcf86cd799439011',
+      name: 'Nadiia',
+      email: 'nadiia@example.com',
+      phone: '+380991112233',
+      role: 'user',
+      passwordHash: 'stored-hash',
+    });
+
+    const result = await service.register({
+      name: 'Nadiia',
+      email: 'nadiia@example.com',
+      phone: '+380991112233',
+      password: 'StrongPass1!',
+    });
+
+    expect(service.verifyToken(result.token)).toEqual(
+      expect.objectContaining({
+        email: 'nadiia@example.com',
+      }),
+    );
+
+    expect(service.logout(result.token)).toEqual(
+      expect.objectContaining({
+        message: 'Logout successful. Remove the token on the client.',
+      }),
+    );
+    expect(() => service.verifyToken(result.token)).toThrow(
+      UnauthorizedException,
+    );
+  });
 });

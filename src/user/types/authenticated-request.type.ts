@@ -11,4 +11,5 @@ export type AuthenticatedUser = {
 
 export interface AuthenticatedRequest extends Request {
   user: AuthenticatedUser;
+  token: string;
 }

@@ -4,7 +4,6 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
-import { Request } from 'express';
 import { UserService } from '../user.service';
 import type { AuthenticatedRequest } from '../types/authenticated-request.type';
 
@@ -15,18 +14,18 @@ export class AuthGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     const authHeader = request.headers.authorization;
+    const [scheme, token] = authHeader?.trim().split(/\s+/) ?? [];
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!scheme || scheme.toLowerCase() !== 'bearer' || !token) {
       throw new UnauthorizedException(
         'Missing or invalid authorization header',
       );
     }
 
-    const token = authHeader.slice(7);
-
     try {
       const user = this.userService.verifyToken(token);
       request.user = user;
+      request.token = token;
       return true;
     } catch {
       throw new UnauthorizedException(

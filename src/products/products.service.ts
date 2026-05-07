@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { escapeRegex } from '../common/utils/regex.util';
 import { QueryProductsDto } from './dto/query-products.dto';
 import { Product, type ProductDocument } from './schemas/product.schema';
 
@@ -12,7 +13,7 @@ export class ProductsService {
   ) {}
 
   async findAll(query: QueryProductsDto) {
-    const { category, name } = query;
+    const { category, name, limit = 50 } = query;
 
     const filters: Record<string, unknown> = {};
 
@@ -25,18 +26,16 @@ export class ProductsService {
 
     if (name) {
       filters.name = {
-        $regex: name,
+        $regex: escapeRegex(name),
         $options: 'i',
       };
     }
 
-    const productsWithQuery = await this.productModel.find(filters).lean();
-
-    if (productsWithQuery.length === 0) {
-      throw new NotFoundException('No products found for the given filters');
-    }
-
-    return productsWithQuery;
+    return this.productModel
+      .find(filters)
+      .sort({ name: 1 })
+      .limit(limit)
+      .lean();
   }
 
   async findOne(id: string) {

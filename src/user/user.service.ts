@@ -5,7 +5,13 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { ConfigService } from '@nestjs/config';
-import { createHmac, randomBytes, timingSafeEqual, scrypt as scryptCallback } from 'crypto';
+import {
+  createHash,
+  createHmac,
+  randomBytes,
+  timingSafeEqual,
+  scrypt as scryptCallback,
+} from 'crypto';
 import { Model } from 'mongoose';
 import { promisify } from 'util';
 import { LoginUserDto } from './dto/login-user.dto';
@@ -32,6 +38,8 @@ type AuthResponse = {
 
 @Injectable()
 export class UserService {
+  private readonly revokedTokenExpirations = new Map<string, number>();
+
   constructor(
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
@@ -90,7 +98,25 @@ export class UserService {
     };
   }
 
+  logout(token: string) {
+    const authenticatedUser = this.verifyToken(token);
+    this.revokedTokenExpirations.set(
+      this.hashToken(token),
+      authenticatedUser.exp,
+    );
+    this.removeExpiredRevokedTokens();
+
+    return {
+      expiresAt: new Date(authenticatedUser.exp * 1000).toISOString(),
+      message: 'Logout successful. Remove the token on the client.',
+    };
+  }
+
   verifyToken(token: string): AuthenticatedUser {
+    if (this.isTokenRevoked(token)) {
+      throw new UnauthorizedException('Authentication token has been revoked');
+    }
+
     const [payloadPart, signaturePart] = token.split('.');
 
     if (!payloadPart || !signaturePart) {
@@ -108,9 +134,7 @@ export class UserService {
       throw new UnauthorizedException('Invalid authentication token');
     }
 
-    const parsedPayload = JSON.parse(
-      Buffer.from(payloadPart, 'base64url').toString('utf8'),
-    ) as AuthenticatedUser;
+    const parsedPayload = this.parseTokenPayload(payloadPart);
 
     if (parsedPayload.exp <= Math.floor(Date.now() / 1000)) {
       throw new UnauthorizedException('Authentication token has expired');
@@ -204,7 +228,52 @@ export class UserService {
       : parsedTokenTtl;
   }
 
-  private extractUserId(user: UserDocument | (User & { _id: unknown })): string {
+  private parseTokenPayload(payloadPart: string): AuthenticatedUser {
+    try {
+      const parsedPayload = JSON.parse(
+        Buffer.from(payloadPart, 'base64url').toString('utf8'),
+      ) as Partial<AuthenticatedUser>;
+
+      if (
+        !parsedPayload.sub ||
+        !parsedPayload.email ||
+        !parsedPayload.name ||
+        !parsedPayload.phone ||
+        !parsedPayload.role ||
+        typeof parsedPayload.exp !== 'number'
+      ) {
+        throw new Error('Token payload is incomplete');
+      }
+
+      return parsedPayload as AuthenticatedUser;
+    } catch {
+      throw new UnauthorizedException('Invalid authentication token');
+    }
+  }
+
+  private extractUserId(
+    user: UserDocument | (User & { _id: unknown }),
+  ): string {
     return String(user._id);
+  }
+
+  private hashToken(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
+  }
+
+  private isTokenRevoked(token: string): boolean {
+    this.removeExpiredRevokedTokens();
+
+    return this.revokedTokenExpirations.has(this.hashToken(token));
+  }
+
+  private removeExpiredRevokedTokens(): void {
+    const now = Math.floor(Date.now() / 1000);
+
+    for (const [tokenHash, expiresAt] of this.revokedTokenExpirations) {
+      if (expiresAt <= now) {
+        this.revokedTokenExpirations.delete(tokenHash);
+      }
+    }
   }
 }
