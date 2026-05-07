@@ -6,12 +6,12 @@ import { ProductsService } from './products.service';
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
-  @Get() //api/products/ or /products?category=value&name=value
+  @Get()
   findAll(@Query() query: QueryProductsDto) {
     return this.productsService.findAll(query);
   }
 
-  @Get(':id') //api/products/:id
+  @Get(':id')
   findOne(@Param('id') id: string) {
     return this.productsService.findOne(id);
   }
