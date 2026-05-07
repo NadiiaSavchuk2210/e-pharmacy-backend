@@ -8,6 +8,11 @@ import {
 import { Request, Response } from 'express';
 import { Error as MongooseError } from 'mongoose';
 
+type MongoDuplicateKeyError = Error & {
+  code?: number;
+  keyValue?: Record<string, unknown>;
+};
+
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost): void {
@@ -39,9 +44,16 @@ export class AllExceptionsFilter implements ExceptionFilter {
         exceptionResponse !== null &&
         'message' in exceptionResponse
       ) {
+        const message = exceptionResponse.message as string | string[];
+
         return {
           statusCode,
-          message: exceptionResponse.message as string | string[],
+          message:
+            statusCode === 404 &&
+            typeof message === 'string' &&
+            message.startsWith('Cannot ')
+              ? `Route ${requestMethodFromMessage(message)} ${requestPathFromMessage(message)} not found`
+              : message,
         };
       }
 
@@ -65,6 +77,18 @@ export class AllExceptionsFilter implements ExceptionFilter {
       };
     }
 
+    if (this.isDuplicateKeyError(exception)) {
+      const duplicateFields = Object.keys(exception.keyValue ?? {});
+
+      return {
+        statusCode: HttpStatus.CONFLICT,
+        message:
+          duplicateFields.length > 0
+            ? `Duplicate value for field: ${duplicateFields.join(', ')}`
+            : 'Duplicate value violates a unique constraint',
+      };
+    }
+
     return {
       statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
       message: 'Internal server error',
@@ -74,4 +98,22 @@ export class AllExceptionsFilter implements ExceptionFilter {
   private getErrorLabel(statusCode: number): string {
     return HttpStatus[statusCode] ?? 'Error';
   }
+
+  private isDuplicateKeyError(
+    exception: unknown,
+  ): exception is MongoDuplicateKeyError {
+    return (
+      exception instanceof Error &&
+      'code' in exception &&
+      (exception as MongoDuplicateKeyError).code === 11000
+    );
+  }
+}
+
+function requestMethodFromMessage(message: string): string {
+  return message.split(' ')[1] ?? 'UNKNOWN';
+}
+
+function requestPathFromMessage(message: string): string {
+  return message.split(' ')[2] ?? 'unknown';
 }

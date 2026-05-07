@@ -33,4 +33,5 @@ export type AuthError = {
 
 export interface AuthenticatedRequest extends Request {
   user: AuthenticatedUser;
+  token: string;
 }

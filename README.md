@@ -69,10 +69,13 @@ http://localhost:3000/api
 - `GET /api/products` - get all products
 - `GET /api/products?category=Medicine` - filter by category
 - `GET /api/products?name=asp` - filter by product name
+- `GET /api/products?limit=25` - limit product results, maximum `100`
 - `GET /api/products/:id` - get one product by public `id`
 - `POST /api/user/register` - register a user with `name`, `email`, `phone`, `password`
 - `POST /api/user/login` - authenticate a user with `email`, `password`
 - `GET /api/user/profile` - get the current user profile with `Authorization: Bearer <token>`
+- `GET /api/user/user-info` - spec-compatible alias for the current user profile
+- `GET /api/user/logout` - stateless logout response; client should remove the bearer token
 
 ## Authentication flow
 
