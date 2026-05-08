@@ -7,6 +7,8 @@ import { validateEnv } from './config/env.validation';
 import { ProductsModule } from './products/products.module';
 import { UserModule } from './user/user.module';
 import { TokenBlacklistService } from './token-blacklist/token-blacklist.service';
+import { StoresModule } from './stores/stores.module';
+import { CustomerReviewsModule } from './customer-reviews/customer-reviews.module';
 
 @Module({
   imports: [
@@ -23,6 +25,8 @@ import { TokenBlacklistService } from './token-blacklist/token-blacklist.service
     }),
     ProductsModule,
     UserModule,
+    StoresModule,
+    CustomerReviewsModule,
   ],
   controllers: [AppController],
   providers: [AppService, TokenBlacklistService],
