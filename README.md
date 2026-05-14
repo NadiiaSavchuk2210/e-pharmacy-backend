@@ -5,7 +5,13 @@ pharmacy store, customer review, and authentication endpoints backed by MongoDB.
 
 ## Live API
 
-Deployed base URL:
+Deployed app URL:
+
+```text
+https://e-pharmacy-backend-z5z2.onrender.com
+```
+
+API base URL:
 
 ```text
 https://e-pharmacy-backend-z5z2.onrender.com/api
