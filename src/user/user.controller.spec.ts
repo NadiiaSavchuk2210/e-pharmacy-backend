@@ -64,11 +64,18 @@ const buildRequest = (
     cookies,
   }) as unknown as AuthenticatedRequest;
 
-const buildResponse = (): Response =>
-  ({
-    cookie: jest.fn(),
-    clearCookie: jest.fn(),
-  }) as unknown as Response;
+type MockResponse = {
+  cookie: jest.Mock;
+  clearCookie: jest.Mock;
+};
+
+const buildResponse = (): MockResponse => ({
+  cookie: jest.fn(),
+  clearCookie: jest.fn(),
+});
+
+const asResponse = (response: MockResponse): Response =>
+  response as unknown as Response;
 
 describe('UserController', () => {
   let controller: UserController;
@@ -101,7 +108,7 @@ describe('UserController', () => {
       mockUserService.register.mockResolvedValue(mockAuthResponse);
       const res = buildResponse();
 
-      const result = await controller.register(dto, res);
+      const result = await controller.register(dto, asResponse(res));
 
       expect(mockUserService.register).toHaveBeenCalledTimes(1);
       expect(mockUserService.register).toHaveBeenCalledWith(dto);
@@ -125,9 +132,9 @@ describe('UserController', () => {
         new Error('User already exists'),
       );
 
-      await expect(controller.register(dto, buildResponse())).rejects.toThrow(
-        'User already exists',
-      );
+      await expect(
+        controller.register(dto, asResponse(buildResponse())),
+      ).rejects.toThrow('User already exists');
     });
   });
 
@@ -143,7 +150,7 @@ describe('UserController', () => {
       mockUserService.login.mockReturnValue(mockAuthResponse);
       const res = buildResponse();
 
-      const result = await controller.login(dto, res);
+      const result = await controller.login(dto, asResponse(res));
 
       expect(mockUserService.login).toHaveBeenCalledTimes(1);
       expect(mockUserService.login).toHaveBeenCalledWith(dto);
@@ -167,9 +174,9 @@ describe('UserController', () => {
         throw new UnauthorizedException('Invalid email or password');
       });
 
-      await expect(controller.login(dto, buildResponse())).rejects.toThrow(
-        UnauthorizedException,
-      );
+      await expect(
+        controller.login(dto, asResponse(buildResponse())),
+      ).rejects.toThrow(UnauthorizedException);
     });
   });
 
@@ -240,7 +247,7 @@ describe('UserController', () => {
       const req = buildRequest(token, mockUser);
       const res = buildResponse();
 
-      const result = controller.logout(req, res);
+      const result = controller.logout(req, asResponse(res));
 
       expect(mockUserService.logout).toHaveBeenCalledWith(token, mockUser);
       expect(res.clearCookie).toHaveBeenCalledWith(
@@ -261,9 +268,52 @@ describe('UserController', () => {
       });
       const req = buildRequest('any.token', mockUser);
 
-      expect(controller.logout(req, buildResponse())).toEqual({
+      expect(controller.logout(req, asResponse(buildResponse()))).toEqual({
         message: 'Successfully logged out',
       });
+    });
+
+    it('clears the refresh cookie even when the access token is missing', () => {
+      const req = {
+        headers: {},
+      } as unknown as AuthenticatedRequest;
+      const res = buildResponse();
+
+      expect(controller.logout(req, asResponse(res))).toEqual({
+        message: 'Successfully logged out',
+      });
+      expect(res.clearCookie).toHaveBeenCalledWith(
+        'refreshToken',
+        expect.objectContaining({
+          httpOnly: true,
+          secure: true,
+          sameSite: 'none',
+          path: '/',
+        }),
+      );
+      expect(mockUserService.logout).not.toHaveBeenCalled();
+    });
+
+    it('still clears the refresh cookie when token revocation fails', () => {
+      mockUserService.logout.mockImplementation(() => {
+        throw new UnauthorizedException('Invalid authentication token');
+      });
+      const res = buildResponse();
+
+      expect(
+        controller.logout(buildRequest('bad.token'), asResponse(res)),
+      ).toEqual({
+        message: 'Successfully logged out',
+      });
+      expect(res.clearCookie).toHaveBeenCalledWith(
+        'refreshToken',
+        expect.objectContaining({
+          httpOnly: true,
+          secure: true,
+          sameSite: 'none',
+          path: '/',
+        }),
+      );
     });
   });
 
@@ -308,15 +358,14 @@ describe('UserController', () => {
   });
 
   describe('guard metadata', () => {
-    const getGuards = (methodName: keyof UserController): unknown[] =>
-      Reflect.getMetadata(
+    const getGuards = (methodName: keyof UserController): unknown[] => {
+      const guards = Reflect.getMetadata(
         GUARDS_METADATA,
         UserController.prototype[methodName],
-      ) ?? [];
+      ) as unknown;
 
-    it('protects logout with AuthGuard', () => {
-      expect(getGuards('logout')).toContain(AuthGuard);
-    });
+      return Array.isArray(guards) ? guards : [];
+    };
 
     it('protects user-info and profile with AuthGuard', () => {
       expect(getGuards('getUserInfo')).toContain(AuthGuard);
