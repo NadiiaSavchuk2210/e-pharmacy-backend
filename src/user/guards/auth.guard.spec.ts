@@ -13,6 +13,7 @@ describe('AuthGuard', () => {
       name: 'Test User',
       phone: '+380991112233',
       role: 'user',
+      type: 'access',
       exp: Math.floor(Date.now() / 1000) + 3600,
     });
 
@@ -44,6 +45,29 @@ describe('AuthGuard', () => {
       switchToHttp: () => ({
         getRequest: () => ({
           headers: {},
+        }),
+      }),
+    } as ExecutionContext;
+
+    expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
+  });
+
+  it('rejects refresh tokens on protected routes', () => {
+    verifyTokenMock.mockReturnValue({
+      sub: 'user-id',
+      email: 'user@example.com',
+      name: 'Test User',
+      phone: '+380991112233',
+      role: 'user',
+      type: 'refresh',
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    });
+    const context = {
+      switchToHttp: () => ({
+        getRequest: () => ({
+          headers: {
+            authorization: 'Bearer refresh-token',
+          },
         }),
       }),
     } as ExecutionContext;

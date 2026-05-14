@@ -58,17 +58,30 @@ export class UserController {
   }
 
   @Get('logout')
-  @UseGuards(AuthGuard)
   logout(
     @Req() request: AuthenticatedRequest,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const token = request.headers.authorization!.slice(7);
     response.clearCookie(
       REFRESH_TOKEN_COOKIE_NAME,
       REFRESH_TOKEN_COOKIE_OPTIONS,
     );
-    return this.userService.logout(token, request.user);
+
+    const token = this.getBearerToken(request);
+
+    if (!token) {
+      return {
+        message: 'Successfully logged out',
+      };
+    }
+
+    try {
+      return this.userService.logout(token, request.user);
+    } catch {
+      return {
+        message: 'Successfully logged out',
+      };
+    }
   }
 
   @Get('user-info')
@@ -126,5 +139,16 @@ export class UserController {
     }
 
     return '';
+  }
+
+  private getBearerToken(request: AuthenticatedRequest): string | undefined {
+    const authHeader = request.headers.authorization;
+    const [scheme, token] = authHeader?.trim().split(/\s+/) ?? [];
+
+    if (scheme?.toLowerCase() !== 'bearer' || !token) {
+      return undefined;
+    }
+
+    return token;
   }
 }
