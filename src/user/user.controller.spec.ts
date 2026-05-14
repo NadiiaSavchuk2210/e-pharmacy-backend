@@ -1,5 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { UnauthorizedException } from '@nestjs/common';
+import { GUARDS_METADATA } from '@nestjs/common/constants';
+import type { Response } from 'express';
 import { UserController } from './user.controller';
 import { UserService } from './user.service';
 import { AuthGuard } from './guards/auth.guard';
@@ -30,8 +32,16 @@ const mockAuthResponse = {
   },
   token: 'access.token.here',
   refreshToken: 'refresh.token.here',
+  refreshTokenExpiresIn: 604800,
   tokenType: 'Bearer' as const,
   expiresIn: 3600,
+};
+
+const mockAuthResponseBody = {
+  user: mockAuthResponse.user,
+  token: mockAuthResponse.token,
+  tokenType: mockAuthResponse.tokenType,
+  expiresIn: mockAuthResponse.expiresIn,
 };
 
 const mockUserService = {
@@ -46,11 +56,19 @@ const mockUserService = {
 const buildRequest = (
   token: string,
   user?: AuthenticatedUser,
+  cookies?: Record<string, string>,
 ): AuthenticatedRequest =>
   ({
     headers: { authorization: `Bearer ${token}` },
     user,
+    cookies,
   }) as unknown as AuthenticatedRequest;
+
+const buildResponse = (): Response =>
+  ({
+    cookie: jest.fn(),
+    clearCookie: jest.fn(),
+  }) as unknown as Response;
 
 describe('UserController', () => {
   let controller: UserController;
@@ -79,14 +97,27 @@ describe('UserController', () => {
       password: 'Secret123!',
     };
 
-    it('delegates to UserService.register and returns its result', async () => {
+    it('sets the refresh cookie and returns the auth body without refreshToken', async () => {
       mockUserService.register.mockResolvedValue(mockAuthResponse);
+      const res = buildResponse();
 
-      const result = await controller.register(dto);
+      const result = await controller.register(dto, res);
 
       expect(mockUserService.register).toHaveBeenCalledTimes(1);
       expect(mockUserService.register).toHaveBeenCalledWith(dto);
-      expect(result).toBe(mockAuthResponse);
+      expect(res.cookie).toHaveBeenCalledWith(
+        'refreshToken',
+        mockAuthResponse.refreshToken,
+        expect.objectContaining({
+          httpOnly: true,
+          secure: true,
+          sameSite: 'none',
+          path: '/',
+          maxAge: mockAuthResponse.refreshTokenExpiresIn * 1000,
+        }),
+      );
+      expect(result).toEqual(mockAuthResponseBody);
+      expect(result).not.toHaveProperty('refreshToken');
     });
 
     it('propagates errors thrown by UserService.register', async () => {
@@ -94,7 +125,7 @@ describe('UserController', () => {
         new Error('User already exists'),
       );
 
-      await expect(controller.register(dto)).rejects.toThrow(
+      await expect(controller.register(dto, buildResponse())).rejects.toThrow(
         'User already exists',
       );
     });
@@ -108,22 +139,37 @@ describe('UserController', () => {
       password: 'Secret123!',
     };
 
-    it('delegates to UserService.login and returns its result', () => {
+    it('sets the refresh cookie and returns the auth body without refreshToken', async () => {
       mockUserService.login.mockReturnValue(mockAuthResponse);
+      const res = buildResponse();
 
-      const result = controller.login(dto);
+      const result = await controller.login(dto, res);
 
       expect(mockUserService.login).toHaveBeenCalledTimes(1);
       expect(mockUserService.login).toHaveBeenCalledWith(dto);
-      expect(result).toBe(mockAuthResponse);
+      expect(res.cookie).toHaveBeenCalledWith(
+        'refreshToken',
+        mockAuthResponse.refreshToken,
+        expect.objectContaining({
+          httpOnly: true,
+          secure: true,
+          sameSite: 'none',
+          path: '/',
+          maxAge: mockAuthResponse.refreshTokenExpiresIn * 1000,
+        }),
+      );
+      expect(result).toEqual(mockAuthResponseBody);
+      expect(result).not.toHaveProperty('refreshToken');
     });
 
-    it('propagates UnauthorizedException on bad credentials', () => {
+    it('propagates UnauthorizedException on bad credentials', async () => {
       mockUserService.login.mockImplementation(() => {
         throw new UnauthorizedException('Invalid email or password');
       });
 
-      expect(() => controller.login(dto)).toThrow(UnauthorizedException);
+      await expect(controller.login(dto, buildResponse())).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
   });
 
@@ -137,9 +183,9 @@ describe('UserController', () => {
       expiresIn: 3600,
     };
 
-    it('strips Bearer prefix and passes the token to UserService.refreshAccessToken', () => {
+    it('reads refreshToken from parsed cookies', () => {
       mockUserService.refreshAccessToken.mockReturnValue(refreshResult);
-      const req = buildRequest(refreshToken);
+      const req = buildRequest('', undefined, { refreshToken });
 
       const result = controller.refresh(req);
 
@@ -149,10 +195,23 @@ describe('UserController', () => {
       expect(result).toBe(refreshResult);
     });
 
-    it('handles a missing Authorization header gracefully (empty string after slice)', () => {
+    it('falls back to parsing the Cookie header', () => {
       mockUserService.refreshAccessToken.mockReturnValue(refreshResult);
       const req = {
-        headers: { authorization: undefined },
+        headers: { cookie: `theme=dark; refreshToken=${refreshToken}` },
+      } as unknown as AuthenticatedRequest;
+
+      controller.refresh(req);
+
+      expect(mockUserService.refreshAccessToken).toHaveBeenCalledWith(
+        refreshToken,
+      );
+    });
+
+    it('handles a missing refresh cookie gracefully', () => {
+      mockUserService.refreshAccessToken.mockReturnValue(refreshResult);
+      const req = {
+        headers: {},
       } as unknown as AuthenticatedRequest;
 
       controller.refresh(req);
@@ -164,7 +223,7 @@ describe('UserController', () => {
       mockUserService.refreshAccessToken.mockImplementation(() => {
         throw new UnauthorizedException('Invalid authentication token');
       });
-      const req = buildRequest('bad.token');
+      const req = buildRequest('', undefined, { refreshToken: 'bad.token' });
 
       expect(() => controller.refresh(req)).toThrow(UnauthorizedException);
     });
@@ -179,10 +238,20 @@ describe('UserController', () => {
         message: 'Successfully logged out',
       });
       const req = buildRequest(token, mockUser);
+      const res = buildResponse();
 
-      const result = controller.logout(req);
+      const result = controller.logout(req, res);
 
       expect(mockUserService.logout).toHaveBeenCalledWith(token, mockUser);
+      expect(res.clearCookie).toHaveBeenCalledWith(
+        'refreshToken',
+        expect.objectContaining({
+          httpOnly: true,
+          secure: true,
+          sameSite: 'none',
+          path: '/',
+        }),
+      );
       expect(result).toEqual({ message: 'Successfully logged out' });
     });
 
@@ -192,7 +261,7 @@ describe('UserController', () => {
       });
       const req = buildRequest('any.token', mockUser);
 
-      expect(controller.logout(req)).toEqual({
+      expect(controller.logout(req, buildResponse())).toEqual({
         message: 'Successfully logged out',
       });
     });
@@ -238,55 +307,20 @@ describe('UserController', () => {
     });
   });
 
-  // ─── AuthGuard integration ───────────────────────────────────────────────
+  describe('guard metadata', () => {
+    const getGuards = (methodName: keyof UserController): unknown[] =>
+      Reflect.getMetadata(
+        GUARDS_METADATA,
+        UserController.prototype[methodName],
+      ) ?? [];
 
-  describe('AuthGuard protection', () => {
-    it('rejects unauthenticated requests to GET /user/logout', async () => {
-      const module: TestingModule = await Test.createTestingModule({
-        controllers: [UserController],
-        providers: [{ provide: UserService, useValue: mockUserService }],
-      })
-        .overrideGuard(AuthGuard)
-        .useValue({
-          canActivate: () => {
-            throw new UnauthorizedException();
-          },
-        })
-        .compile();
-
-      const guardedController = module.get<UserController>(UserController);
-      const req = {
-        headers: {},
-        user: undefined,
-      } as unknown as AuthenticatedRequest;
-
-      expect(() => guardedController.logout(req)).toThrow(
-        UnauthorizedException,
-      );
+    it('protects logout with AuthGuard', () => {
+      expect(getGuards('logout')).toContain(AuthGuard);
     });
 
-    it('rejects unauthenticated requests to GET /user/profile', async () => {
-      const module: TestingModule = await Test.createTestingModule({
-        controllers: [UserController],
-        providers: [{ provide: UserService, useValue: mockUserService }],
-      })
-        .overrideGuard(AuthGuard)
-        .useValue({
-          canActivate: () => {
-            throw new UnauthorizedException();
-          },
-        })
-        .compile();
-
-      const guardedController = module.get<UserController>(UserController);
-      const req = {
-        headers: {},
-        user: undefined,
-      } as unknown as AuthenticatedRequest;
-
-      expect(() => guardedController.getProfile(req)).toThrow(
-        UnauthorizedException,
-      );
+    it('protects user-info and profile with AuthGuard', () => {
+      expect(getGuards('getUserInfo')).toContain(AuthGuard);
+      expect(getGuards('getProfile')).toContain(AuthGuard);
     });
   });
 });

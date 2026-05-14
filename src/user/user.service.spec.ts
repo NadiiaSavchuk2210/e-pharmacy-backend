@@ -126,9 +126,10 @@ describe('UserService', () => {
 
       expect(result).toMatchObject({
         tokenType: 'Bearer',
-        expiresIn: expect(Number),
-        token: expect(String),
-        refreshToken: expect(String),
+        expiresIn: expect.any(Number),
+        token: expect.any(String),
+        refreshToken: expect.any(String),
+        refreshTokenExpiresIn: expect.any(Number),
         user: {
           id: 'user-id-123',
           name: 'Jane Doe',
@@ -562,10 +563,10 @@ describe('UserService', () => {
   });
 
   it('revokes the current token on logout', async () => {
-    findOneMock.mockReturnValue({
-      lean: jest.fn().mockResolvedValue(null),
+    mockUserModel.findOne.mockReturnValue({
+      lean: jest.fn().mockReturnValue(null),
     });
-    createMock.mockResolvedValue({
+    mockUserModel.create.mockResolvedValue({
       _id: '507f1f77bcf86cd799439011',
       name: 'Nadiia',
       email: 'nadiia@example.com',
@@ -589,11 +590,12 @@ describe('UserService', () => {
 
     expect(service.logout(result.token)).toEqual(
       expect.objectContaining({
-        message: 'Logout successful. Remove the token on the client.',
+        message: 'Successfully logged out',
       }),
     );
-    expect(() => service.verifyToken(result.token)).toThrow(
-      UnauthorizedException,
+    expect(mockTokenBlacklistService.add).toHaveBeenCalledWith(
+      result.token,
+      expect.any(Number),
     );
   });
 });
