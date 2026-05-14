@@ -19,7 +19,7 @@ import { User, type UserDocument } from './schemas/user.schema';
 import { TokenBlacklistService } from '../token-blacklist/token-blacklist.service';
 import type {
   AuthenticatedUser,
-  AuthResponse,
+  AuthSession,
 } from './types/authenticated-request.type';
 
 const scrypt = promisify(scryptCallback);
@@ -33,7 +33,7 @@ export class UserService {
     private readonly tokenBlacklistService: TokenBlacklistService,
   ) {}
 
-  async register(registerUserDto: RegisterUserDto): Promise<AuthResponse> {
+  async register(registerUserDto: RegisterUserDto): Promise<AuthSession> {
     const email = registerUserDto.email.trim().toLowerCase();
     const phone = registerUserDto.phone.trim();
     const name = registerUserDto.name.trim();
@@ -55,7 +55,7 @@ export class UserService {
     return this.buildAuthResponse(createdUser);
   }
 
-  async login(loginUserDto: LoginUserDto): Promise<AuthResponse> {
+  async login(loginUserDto: LoginUserDto): Promise<AuthSession> {
     const email = loginUserDto.email.trim().toLowerCase();
     const user = await this.userModel.findOne({ email });
 
@@ -185,7 +185,9 @@ export class UserService {
     return timingSafeEqual(storedHashBuffer, derivedKey);
   }
 
-  private buildAuthResponse(user: UserDocument | (User & { _id: unknown })) {
+  private buildAuthResponse(
+    user: UserDocument | (User & { _id: unknown }),
+  ): AuthSession {
     const tokenTtlSeconds = this.getTokenTtlSeconds();
     const refreshTokenTtlSeconds = this.getRefreshTokenTtlSeconds();
     const basePayload = {
@@ -216,6 +218,7 @@ export class UserService {
       },
       token: authToken,
       refreshToken,
+      refreshTokenExpiresIn: refreshTokenTtlSeconds,
       tokenType: 'Bearer' as const,
       expiresIn: tokenTtlSeconds,
     };

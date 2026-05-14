@@ -21,9 +21,13 @@ export type SafeUser = {
 export type AuthResponse = {
   user: SafeUser;
   token: string;
-  refreshToken: string;
   tokenType: 'Bearer';
   expiresIn: number;
+};
+
+export type AuthSession = AuthResponse & {
+  refreshToken: string;
+  refreshTokenExpiresIn: number;
 };
 
 export type AuthError = {
@@ -34,4 +38,5 @@ export type AuthError = {
 export interface AuthenticatedRequest extends Request {
   user: AuthenticatedUser;
   token: string;
+  cookies: Record<string, string | undefined>;
 }
