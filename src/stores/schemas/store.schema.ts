@@ -3,6 +3,7 @@ import { HydratedDocument } from 'mongoose';
 
 export type StoreDocument = HydratedDocument<Store>;
 export type NearestStoreDocument = HydratedDocument<NearestStore>;
+export type StoreStatus = 'OPEN' | 'CLOSE';
 
 @Schema({
   collection: 'pharmacies',
@@ -10,6 +11,9 @@ export type NearestStoreDocument = HydratedDocument<NearestStore>;
   versionKey: false,
 })
 export class Store {
+  @Prop({ required: false, unique: true, trim: true })
+  id?: string;
+
   @Prop({ required: true, trim: true })
   name: string;
 
@@ -24,6 +28,9 @@ export class Store {
 
   @Prop({ required: true, min: 0, max: 5 })
   rating: number;
+
+  @Prop({ required: false, type: String, enum: ['OPEN', 'CLOSE'] })
+  status?: StoreStatus;
 }
 
 @Schema({
@@ -32,6 +39,9 @@ export class Store {
   versionKey: false,
 })
 export class NearestStore {
+  @Prop({ required: false, unique: true, trim: true })
+  id?: string;
+
   @Prop({ required: true, trim: true })
   name: string;
 
@@ -46,6 +56,9 @@ export class NearestStore {
 
   @Prop({ required: true, min: 0, max: 5 })
   rating: number;
+
+  @Prop({ required: false, type: String, enum: ['OPEN', 'CLOSE'] })
+  status?: StoreStatus;
 }
 
 export const StoreSchema = SchemaFactory.createForClass(Store);

@@ -31,3 +31,17 @@ export function parseLimit({ value }: TransformFnParams): number | undefined {
 
   return Number.isNaN(parsedValue) ? undefined : parsedValue;
 }
+
+export function parseDiscount({
+  value,
+}: TransformFnParams): number | undefined {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+
+  const normalizedValue: string =
+    typeof value === 'string' ? value.trim().replace(/%$/, '') : String(value);
+  const parsedValue = Number.parseInt(String(normalizedValue), 10);
+
+  return Number.isNaN(parsedValue) ? undefined : parsedValue;
+}

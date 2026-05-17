@@ -1,4 +1,4 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Param, Query } from '@nestjs/common';
 import { QueryNearestStoresDto } from './dto/query-nearest-stores.dto';
 import { QueryStoresDto } from './dto/query-stores.dto';
 import { StoresService } from './stores.service';
@@ -15,5 +15,10 @@ export class StoresController {
   @Get('nearest')
   findNearest(@Query() query: QueryNearestStoresDto) {
     return this.storesService.findNearest(query);
+  }
+
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return this.storesService.findOne(id);
   }
 }

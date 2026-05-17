@@ -13,7 +13,7 @@ export class ProductsService {
   ) {}
 
   async findAll(query: QueryProductsDto) {
-    const { category, name, limit = 50 } = query;
+    const { category, discount, name, limit = 50 } = query;
 
     const filters: Record<string, unknown> = {};
 
@@ -28,6 +28,12 @@ export class ProductsService {
       filters.name = {
         $regex: escapeRegex(name),
         $options: 'i',
+      };
+    }
+
+    if (discount !== undefined) {
+      filters.discount = {
+        $in: [discount, String(discount), `${discount}%`],
       };
     }
 

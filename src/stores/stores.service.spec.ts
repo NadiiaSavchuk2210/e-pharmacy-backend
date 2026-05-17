@@ -6,7 +6,9 @@ import { StoresService } from './stores.service';
 describe('StoresService', () => {
   let service: StoresService;
   let findMock: jest.Mock;
+  let findOneMock: jest.Mock;
   let findNearestMock: jest.Mock;
+  let aggregateMock: jest.Mock;
   let sortMock: jest.Mock;
   let sortNearestMock: jest.Mock;
   let limitMock: jest.Mock;
@@ -14,7 +16,9 @@ describe('StoresService', () => {
 
   beforeEach(async () => {
     findMock = jest.fn();
+    findOneMock = jest.fn();
     findNearestMock = jest.fn();
+    aggregateMock = jest.fn();
     sortMock = jest.fn();
     sortNearestMock = jest.fn();
     limitMock = jest.fn();
@@ -27,6 +31,8 @@ describe('StoresService', () => {
           provide: getModelToken(Store.name),
           useValue: {
             find: findMock,
+            findOne: findOneMock,
+            aggregate: aggregateMock,
           },
         },
         {
@@ -59,6 +65,18 @@ describe('StoresService', () => {
     expect(limitMock).toHaveBeenCalledWith(25);
   });
 
+  it('returns a random sample of stores when requested', async () => {
+    aggregateMock.mockResolvedValue([{ id: 'store-1' }, { id: 'store-2' }]);
+
+    await expect(service.findAll({ limit: 6, random: true })).resolves.toEqual([
+      { id: 'store-1', status: 'OPEN' },
+      { id: 'store-2', status: 'OPEN' },
+    ]);
+
+    expect(aggregateMock).toHaveBeenCalledWith([{ $sample: { size: 6 } }]);
+    expect(findMock).not.toHaveBeenCalled();
+  });
+
   it('returns nearest pharmacies from the nearest_pharmacies model', async () => {
     const leanMock = jest.fn().mockResolvedValue([
       {
@@ -79,5 +97,17 @@ describe('StoresService', () => {
     expect(findNearestMock).toHaveBeenCalledWith();
     expect(sortNearestMock).toHaveBeenCalledWith({ rating: -1, name: 1 });
     expect(limitNearestMock).toHaveBeenCalledWith(5);
+  });
+
+  it('finds a store by public id', async () => {
+    const leanMock = jest.fn().mockResolvedValue({ id: 'store-1' });
+    findOneMock.mockReturnValue({ lean: leanMock });
+
+    await expect(service.findOne('store-1')).resolves.toEqual({
+      id: 'store-1',
+      status: 'OPEN',
+    });
+
+    expect(findOneMock).toHaveBeenCalledWith({ $or: [{ id: 'store-1' }] });
   });
 });
