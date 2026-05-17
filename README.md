@@ -189,19 +189,21 @@ Product fields:
 
 ### Stores
 
-| Method | Endpoint              | Auth | Description                                                        |
-| ------ | --------------------- | ---- | ------------------------------------------------------------------ |
-| `GET`  | `/api/stores`         | No   | Returns pharmacies sorted by name.                                 |
-| `GET`  | `/api/stores/nearest` | No   | Returns nearest pharmacies sorted by rating descending, then name. |
-| `GET`  | `/api/stores/:id`     | No   | Returns one pharmacy by public `id` or Mongo `_id`.                |
+| Method | Endpoint                     | Auth | Description                                                        |
+| ------ | ---------------------------- | ---- | ------------------------------------------------------------------ |
+| `GET`  | `/api/stores`                | No   | Returns pharmacies sorted by name.                                 |
+| `GET`  | `/api/stores/nearest`        | No   | Returns nearest pharmacies sorted by rating descending, then name. |
+| `GET`  | `/api/stores/random-nearest` | No   | Returns random nearest pharmacies from the database.               |
+| `GET`  | `/api/stores/:id`            | No   | Returns one pharmacy by public `id` or Mongo `_id`.                |
 
 Store query parameters:
 
-| Endpoint              | Parameter | Default | Rules                                                                                         |
-| --------------------- | --------- | ------- | --------------------------------------------------------------------------------------------- |
-| `/api/stores`         | `limit`   | `50`    | Integer from `1` to `100`. Use `limit=6&random=true` for the home page medicine stores block. |
-| `/api/stores`         | `random`  | `false` | Boolean. When `true`, returns a random sample from the pharmacies collection.                 |
-| `/api/stores/nearest` | `limit`   | `10`    | Integer from `1` to `100`.                                                                    |
+| Endpoint                     | Parameter | Default | Rules                                                                                         |
+| ---------------------------- | --------- | ------- | --------------------------------------------------------------------------------------------- |
+| `/api/stores`                | `limit`   | `50`    | Integer from `1` to `100`. Use `limit=6&random=true` for the home page medicine stores block. |
+| `/api/stores`                | `random`  | `false` | Boolean. When `true`, returns a random sample from the pharmacies collection.                 |
+| `/api/stores/nearest`        | `limit`   | `10`    | Integer from `1` to `100`.                                                                    |
+| `/api/stores/random-nearest` | `limit`   | `6`     | Integer from `1` to `100`. Controls the random sample size.                                   |
 
 Examples:
 
@@ -209,6 +211,7 @@ Examples:
 curl "http://localhost:3000/api/stores?limit=25"
 curl "http://localhost:3000/api/stores?limit=6&random=true"
 curl "http://localhost:3000/api/stores/nearest?limit=5"
+curl "http://localhost:3000/api/stores/random-nearest?limit=6"
 curl "http://localhost:3000/api/stores/store-001"
 ```
 
