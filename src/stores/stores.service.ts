@@ -8,7 +8,9 @@ import {
   type NearestStoreDocument,
   Store,
   type StoreDocument,
+  type StoreStatus,
 } from './schemas/store.schema';
+import { type StoreResponse } from './types/store-response.type';
 
 @Injectable()
 export class StoresService {
@@ -19,7 +21,7 @@ export class StoresService {
     private readonly nearestStoreModel: Model<NearestStoreDocument>,
   ) {}
 
-  async findAll(query: QueryStoresDto = {}) {
+  async findAll(query: QueryStoresDto = {}): Promise<StoreResponse[]> {
     const { limit = 50, random = false } = query;
 
     if (random) {
@@ -39,7 +41,9 @@ export class StoresService {
     return stores.map((store) => this.withDefaultStatus(store));
   }
 
-  async findNearest(query: QueryNearestStoresDto = {}) {
+  async findNearest(
+    query: QueryNearestStoresDto = {},
+  ): Promise<StoreResponse[]> {
     const { limit = 10 } = query;
 
     const stores = await this.nearestStoreModel
@@ -51,7 +55,19 @@ export class StoresService {
     return stores.map((store) => this.withDefaultStatus(store));
   }
 
-  async findOne(id: string) {
+  async findRandomNearest(
+    query: QueryNearestStoresDto = {},
+  ): Promise<StoreResponse[]> {
+    const { limit = 6 } = query;
+
+    const stores = await this.nearestStoreModel.aggregate<NearestStore>([
+      { $sample: { size: limit } },
+    ]);
+
+    return stores.map((store) => this.withDefaultStatus(store));
+  }
+
+  async findOne(id: string): Promise<StoreResponse> {
     const filters: Record<string, unknown>[] = [{ id }];
 
     if (Types.ObjectId.isValid(id)) {
@@ -64,7 +80,9 @@ export class StoresService {
     return this.withDefaultStatus(store);
   }
 
-  private withDefaultStatus<T extends { status?: unknown }>(store: T) {
+  private withDefaultStatus<T extends Store | NearestStore>(
+    store: T,
+  ): T & { status: StoreStatus } {
     return {
       ...store,
       status: store.status ?? 'OPEN',

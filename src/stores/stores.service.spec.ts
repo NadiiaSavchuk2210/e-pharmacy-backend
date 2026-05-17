@@ -9,6 +9,7 @@ describe('StoresService', () => {
   let findOneMock: jest.Mock;
   let findNearestMock: jest.Mock;
   let aggregateMock: jest.Mock;
+  let aggregateNearestMock: jest.Mock;
   let sortMock: jest.Mock;
   let sortNearestMock: jest.Mock;
   let limitMock: jest.Mock;
@@ -19,6 +20,7 @@ describe('StoresService', () => {
     findOneMock = jest.fn();
     findNearestMock = jest.fn();
     aggregateMock = jest.fn();
+    aggregateNearestMock = jest.fn();
     sortMock = jest.fn();
     sortNearestMock = jest.fn();
     limitMock = jest.fn();
@@ -39,6 +41,7 @@ describe('StoresService', () => {
           provide: getModelToken(NearestStore.name),
           useValue: {
             find: findNearestMock,
+            aggregate: aggregateNearestMock,
           },
         },
       ],
@@ -97,6 +100,33 @@ describe('StoresService', () => {
     expect(findNearestMock).toHaveBeenCalledWith();
     expect(sortNearestMock).toHaveBeenCalledWith({ rating: -1, name: 1 });
     expect(limitNearestMock).toHaveBeenCalledWith(5);
+  });
+
+  it('returns a random nearest store sample with a default limit', async () => {
+    aggregateNearestMock.mockResolvedValue([
+      { id: 'nearest-1' },
+      { id: 'nearest-2', status: 'CLOSE' },
+    ]);
+
+    await expect(service.findRandomNearest()).resolves.toEqual([
+      { id: 'nearest-1', status: 'OPEN' },
+      { id: 'nearest-2', status: 'CLOSE' },
+    ]);
+
+    expect(aggregateNearestMock).toHaveBeenCalledWith([
+      { $sample: { size: 6 } },
+    ]);
+    expect(findNearestMock).not.toHaveBeenCalled();
+  });
+
+  it('returns a random nearest store sample with a custom limit', async () => {
+    aggregateNearestMock.mockResolvedValue([]);
+
+    await service.findRandomNearest({ limit: 4 });
+
+    expect(aggregateNearestMock).toHaveBeenCalledWith([
+      { $sample: { size: 4 } },
+    ]);
   });
 
   it('finds a store by public id', async () => {
