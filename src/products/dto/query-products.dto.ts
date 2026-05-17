@@ -10,6 +10,7 @@ import {
 } from 'class-validator';
 import { PRODUCT_CATEGORIES, type ProductCategory } from '../products.types';
 import {
+  parseDiscount,
   parseLimit,
   normalizeCategory,
   trimQueryValue,
@@ -26,6 +27,13 @@ export class QueryProductsDto {
   @MaxLength(100)
   @Transform(trimQueryValue)
   name?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  @Transform(parseDiscount)
+  discount?: number;
 
   @IsOptional()
   @IsInt()

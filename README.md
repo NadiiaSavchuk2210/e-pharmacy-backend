@@ -25,9 +25,10 @@ curl https://e-pharmacy-backend-z5z2.onrender.com/api
 
 ## Features
 
-- Product catalog with filtering by category, partial name search, sorting, and
-  bounded result limits.
-- Store listing for pharmacies and nearest pharmacies.
+- Product catalog with filtering by category, discount, partial name search,
+  sorting, and bounded result limits.
+- Store listing for pharmacies, random store samples, nearest pharmacies, and
+  store details.
 - Customer review listing sorted by newest first.
 - User registration, login, profile lookup, token refresh, and logout.
 - Access token authentication with `Authorization: Bearer <token>`.
@@ -96,20 +97,20 @@ cp .env.example .env
 
 Required variables:
 
-| Variable | Description |
-| --- | --- |
-| `MONGODB_URI` | MongoDB connection string. |
+| Variable            | Description                                                             |
+| ------------------- | ----------------------------------------------------------------------- |
+| `MONGODB_URI`       | MongoDB connection string.                                              |
 | `AUTH_TOKEN_SECRET` | Secret used to sign access and refresh tokens. Use a long random value. |
 
 Optional variables:
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `PORT` | `3000` | HTTP server port. |
-| `CORS_ORIGIN` | `http://localhost:5173` | Allowed frontend origin. Supports comma-separated values. |
-| `MONGODB_DB_NAME` | Mongo URI default | Database name to use from the MongoDB connection. |
-| `AUTH_TOKEN_TTL` | `86400` | Access token lifetime in seconds. |
-| `AUTH_REFRESH_TOKEN_TTL` | `604800` | Refresh token lifetime in seconds when omitted at runtime. |
+| Variable                 | Default                 | Description                                                |
+| ------------------------ | ----------------------- | ---------------------------------------------------------- |
+| `PORT`                   | `3000`                  | HTTP server port.                                          |
+| `CORS_ORIGIN`            | `http://localhost:5173` | Allowed frontend origin. Supports comma-separated values.  |
+| `MONGODB_DB_NAME`        | Mongo URI default       | Database name to use from the MongoDB connection.          |
+| `AUTH_TOKEN_TTL`         | `86400`                 | Access token lifetime in seconds.                          |
+| `AUTH_REFRESH_TOKEN_TTL` | `604800`                | Refresh token lifetime in seconds when omitted at runtime. |
 
 Example:
 
@@ -141,24 +142,25 @@ All endpoints are prefixed with `/api`.
 
 ### Health
 
-| Method | Endpoint | Auth | Description |
-| --- | --- | --- | --- |
-| `GET` | `/api` | No | Returns API name, status, and server timestamp. |
+| Method | Endpoint | Auth | Description                                     |
+| ------ | -------- | ---- | ----------------------------------------------- |
+| `GET`  | `/api`   | No   | Returns API name, status, and server timestamp. |
 
 ### Products
 
-| Method | Endpoint | Auth | Description |
-| --- | --- | --- | --- |
-| `GET` | `/api/products` | No | Returns products sorted by name. |
-| `GET` | `/api/products/:id` | No | Returns one product by public product `id`. |
+| Method | Endpoint            | Auth | Description                                 |
+| ------ | ------------------- | ---- | ------------------------------------------- |
+| `GET`  | `/api/products`     | No   | Returns products sorted by name.            |
+| `GET`  | `/api/products/:id` | No   | Returns one product by public product `id`. |
 
 Product query parameters:
 
-| Parameter | Type | Default | Rules |
-| --- | --- | --- | --- |
-| `category` | string | none | One of `Medicine`, `Heart`, `Head`, `Hand`, `Leg`, `Dental Care`, `Skin Care`. Matching is normalized and case-insensitive in the database query. |
-| `name` | string | none | Partial case-insensitive search. Maximum 100 characters. |
-| `limit` | number | `50` | Integer from `1` to `100`. |
+| Parameter  | Type   | Default | Rules                                                                                                                                             |
+| ---------- | ------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `category` | string | none    | One of `Medicine`, `Heart`, `Head`, `Hand`, `Leg`, `Dental Care`, `Skin Care`. Matching is normalized and case-insensitive in the database query. |
+| `name`     | string | none    | Partial case-insensitive search. Maximum 100 characters.                                                                                          |
+| `discount` | number | none    | Integer from `0` to `100`. Accepts values like `70` or `70%` and matches numeric or string discount values in MongoDB.                            |
+| `limit`    | number | `50`    | Integer from `1` to `100`.                                                                                                                        |
 
 Examples:
 
@@ -166,6 +168,7 @@ Examples:
 curl "http://localhost:3000/api/products"
 curl "http://localhost:3000/api/products?category=Medicine&limit=20"
 curl "http://localhost:3000/api/products?name=aspirin"
+curl "http://localhost:3000/api/products?category=Medicine&discount=70"
 curl "http://localhost:3000/api/products/product-001"
 ```
 
@@ -179,48 +182,55 @@ Product fields:
   "suppliers": "Acme Pharma",
   "stock": "In Stock",
   "price": "12.99",
+  "discount": 70,
   "category": "Medicine"
 }
 ```
 
 ### Stores
 
-| Method | Endpoint | Auth | Description |
-| --- | --- | --- | --- |
-| `GET` | `/api/stores` | No | Returns pharmacies sorted by name. |
-| `GET` | `/api/stores/nearest` | No | Returns nearest pharmacies sorted by rating descending, then name. |
+| Method | Endpoint              | Auth | Description                                                        |
+| ------ | --------------------- | ---- | ------------------------------------------------------------------ |
+| `GET`  | `/api/stores`         | No   | Returns pharmacies sorted by name.                                 |
+| `GET`  | `/api/stores/nearest` | No   | Returns nearest pharmacies sorted by rating descending, then name. |
+| `GET`  | `/api/stores/:id`     | No   | Returns one pharmacy by public `id` or Mongo `_id`.                |
 
 Store query parameters:
 
-| Endpoint | Parameter | Default | Rules |
-| --- | --- | --- | --- |
-| `/api/stores` | `limit` | `50` | Integer from `1` to `100`. |
-| `/api/stores/nearest` | `limit` | `10` | Integer from `1` to `100`. |
+| Endpoint              | Parameter | Default | Rules                                                                                         |
+| --------------------- | --------- | ------- | --------------------------------------------------------------------------------------------- |
+| `/api/stores`         | `limit`   | `50`    | Integer from `1` to `100`. Use `limit=6&random=true` for the home page medicine stores block. |
+| `/api/stores`         | `random`  | `false` | Boolean. When `true`, returns a random sample from the pharmacies collection.                 |
+| `/api/stores/nearest` | `limit`   | `10`    | Integer from `1` to `100`.                                                                    |
 
 Examples:
 
 ```bash
 curl "http://localhost:3000/api/stores?limit=25"
+curl "http://localhost:3000/api/stores?limit=6&random=true"
 curl "http://localhost:3000/api/stores/nearest?limit=5"
+curl "http://localhost:3000/api/stores/store-001"
 ```
 
 Store fields:
 
 ```json
 {
+  "id": "store-001",
   "name": "Central Pharmacy",
   "address": "1 Main St",
   "city": "Kyiv",
   "phone": "+380991112233",
-  "rating": 4.8
+  "rating": 4.8,
+  "status": "OPEN"
 }
 ```
 
 ### Customer Reviews
 
-| Method | Endpoint | Auth | Description |
-| --- | --- | --- | --- |
-| `GET` | `/api/customer-reviews` | No | Returns reviews sorted by newest first. |
+| Method | Endpoint                | Auth | Description                             |
+| ------ | ----------------------- | ---- | --------------------------------------- |
+| `GET`  | `/api/customer-reviews` | No   | Returns reviews sorted by newest first. |
 
 Example:
 
@@ -239,14 +249,14 @@ Review fields:
 
 ### Authentication
 
-| Method | Endpoint | Auth | Description |
-| --- | --- | --- | --- |
-| `POST` | `/api/user/register` | No | Creates a user, returns an access token, and sets a refresh token cookie. |
-| `POST` | `/api/user/login` | No | Authenticates a user, returns an access token, and sets a refresh token cookie. |
-| `POST` | `/api/user/refresh` | Refresh cookie | Issues a new access token from the `refreshToken` cookie. |
-| `GET` | `/api/user/profile` | Bearer token | Returns full current user profile. |
-| `GET` | `/api/user/user-info` | Bearer token | Returns lightweight current user info. |
-| `GET` | `/api/user/logout` | Optional bearer token | Clears the refresh cookie and revokes the supplied access token when present. |
+| Method | Endpoint              | Auth                  | Description                                                                     |
+| ------ | --------------------- | --------------------- | ------------------------------------------------------------------------------- |
+| `POST` | `/api/user/register`  | No                    | Creates a user, returns an access token, and sets a refresh token cookie.       |
+| `POST` | `/api/user/login`     | No                    | Authenticates a user, returns an access token, and sets a refresh token cookie. |
+| `POST` | `/api/user/refresh`   | Refresh cookie        | Issues a new access token from the `refreshToken` cookie.                       |
+| `GET`  | `/api/user/profile`   | Bearer token          | Returns full current user profile.                                              |
+| `GET`  | `/api/user/user-info` | Bearer token          | Returns lightweight current user info.                                          |
+| `GET`  | `/api/user/logout`    | Optional bearer token | Clears the refresh cookie and revokes the supplied access token when present.   |
 
 Registration body:
 
@@ -261,12 +271,12 @@ Registration body:
 
 Registration validation:
 
-| Field | Rules |
-| --- | --- |
-| `name` | 2 to 60 characters. Letters, spaces, apostrophes, and hyphens only. Supports Latin and Ukrainian letters. |
-| `email` | Valid email, maximum 254 characters. |
-| `phone` | Valid phone number. |
-| `password` | 8 to 64 characters with uppercase, lowercase, number, and special character. |
+| Field      | Rules                                                                                                     |
+| ---------- | --------------------------------------------------------------------------------------------------------- |
+| `name`     | 2 to 60 characters. Letters, spaces, apostrophes, and hyphens only. Supports Latin and Ukrainian letters. |
+| `email`    | Valid email, maximum 254 characters.                                                                      |
+| `phone`    | Valid phone number.                                                                                       |
+| `password` | 8 to 64 characters with uppercase, lowercase, number, and special character.                              |
 
 Login body:
 
@@ -306,13 +316,13 @@ When calling auth endpoints from a browser frontend, include credentials so the
 refresh cookie can be stored and sent:
 
 ```ts
-fetch("https://e-pharmacy-backend-z5z2.onrender.com/api/user/login", {
-  method: "POST",
-  credentials: "include",
-  headers: { "Content-Type": "application/json" },
+fetch('https://e-pharmacy-backend-z5z2.onrender.com/api/user/login', {
+  method: 'POST',
+  credentials: 'include',
+  headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
-    email: "nadiia@example.com",
-    password: "StrongPass1!",
+    email: 'nadiia@example.com',
+    password: 'StrongPass1!',
   }),
 });
 ```
@@ -344,9 +354,7 @@ Error responses are formatted by the global exception filter:
 ```json
 {
   "statusCode": 400,
-  "message": [
-    "limit must not be greater than 100"
-  ],
+  "message": ["limit must not be greater than 100"],
   "error": "BAD_REQUEST",
   "timestamp": "2026-05-14T09:10:05.187Z",
   "path": "/api/products?limit=101"
@@ -355,23 +363,23 @@ Error responses are formatted by the global exception filter:
 
 Common errors:
 
-| Status | Typical cause |
-| --- | --- |
-| `400` | Invalid query parameter or request body. |
-| `401` | Missing, invalid, expired, or revoked token. |
-| `404` | Unknown route or product not found. |
-| `409` | Duplicate user email. |
-| `500` | Unhandled server error. |
+| Status | Typical cause                                |
+| ------ | -------------------------------------------- |
+| `400`  | Invalid query parameter or request body.     |
+| `401`  | Missing, invalid, expired, or revoked token. |
+| `404`  | Unknown route or product not found.          |
+| `409`  | Duplicate user email.                        |
+| `500`  | Unhandled server error.                      |
 
 ## Database Collections
 
-| Collection | Used by | Notes |
-| --- | --- | --- |
-| `products` | Product catalog | Indexed by category and name. |
-| `pharmacies` | Store listing | Indexed by name. |
-| `nearest_pharmacies` | Nearest store listing | Indexed by rating and name. |
-| `reviews` | Customer reviews | Indexed by creation date. |
-| `users` | Authentication | Stores password hashes, not raw passwords. |
+| Collection           | Used by               | Notes                                      |
+| -------------------- | --------------------- | ------------------------------------------ |
+| `products`           | Product catalog       | Indexed by category/name and discount.     |
+| `pharmacies`         | Store listing         | Indexed by name and public id.             |
+| `nearest_pharmacies` | Nearest store listing | Indexed by rating/name and public id.      |
+| `reviews`            | Customer reviews      | Indexed by creation date.                  |
+| `users`              | Authentication        | Stores password hashes, not raw passwords. |
 
 ## Available Scripts
 

@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument } from 'mongoose';
+import { HydratedDocument, Schema as MongooseSchema } from 'mongoose';
 import { PRODUCT_CATEGORIES, type ProductCategory } from '../products.types';
 
 export type ProductDocument = HydratedDocument<Product>;
@@ -28,6 +28,9 @@ export class Product {
   @Prop({ required: true, trim: true })
   price: string;
 
+  @Prop({ required: false, type: MongooseSchema.Types.Mixed })
+  discount?: number | string;
+
   @Prop({ required: true, type: String, enum: PRODUCT_CATEGORIES })
   category: ProductCategory;
 }
@@ -35,3 +38,4 @@ export class Product {
 export const ProductSchema = SchemaFactory.createForClass(Product);
 
 ProductSchema.index({ category: 1, name: 1 });
+ProductSchema.index({ discount: 1 });

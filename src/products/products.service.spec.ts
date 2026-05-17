@@ -84,4 +84,29 @@ describe('ProductsService', () => {
     });
     expect(limitMock).toHaveBeenCalledWith(10);
   });
+
+  it('filters products by discount query values', async () => {
+    const leanMock = jest
+      .fn()
+      .mockResolvedValue([{ id: '1', name: 'Discount Aspirin', discount: 70 }]);
+
+    limitMock.mockReturnValue({ lean: leanMock });
+    sortMock.mockReturnValue({ limit: limitMock });
+    findMock.mockReturnValue({ sort: sortMock });
+
+    await service.findAll({
+      category: 'Medicine',
+      discount: 70,
+    });
+
+    expect(findMock).toHaveBeenCalledWith({
+      category: {
+        $regex: '^Medicine$',
+        $options: 'i',
+      },
+      discount: {
+        $in: [70, '70', '70%'],
+      },
+    });
+  });
 });

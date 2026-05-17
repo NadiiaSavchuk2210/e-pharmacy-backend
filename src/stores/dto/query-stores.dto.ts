@@ -1,5 +1,31 @@
-import { Type } from 'class-transformer';
-import { IsInt, IsOptional, Max, Min } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import { IsBoolean, IsInt, IsOptional, Max, Min } from 'class-validator';
+
+function parseBoolean({ value }: { value: unknown }): boolean | undefined {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const normalizedValue = value.trim().toLowerCase();
+
+  if (normalizedValue === 'true') {
+    return true;
+  }
+
+  if (normalizedValue === 'false') {
+    return false;
+  }
+
+  return undefined;
+}
 
 export class QueryStoresDto {
   @IsOptional()
@@ -8,4 +34,9 @@ export class QueryStoresDto {
   @Min(1)
   @Max(100)
   limit?: number = 50;
+
+  @IsOptional()
+  @IsBoolean()
+  @Transform(parseBoolean)
+  random?: boolean = false;
 }
