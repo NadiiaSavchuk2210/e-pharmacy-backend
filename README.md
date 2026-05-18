@@ -160,13 +160,14 @@ Product query parameters:
 | `category` | string | none    | One of `Medicine`, `Heart`, `Head`, `Hand`, `Leg`, `Dental Care`, `Skin Care`. Matching is normalized and case-insensitive in the database query. |
 | `name`     | string | none    | Partial case-insensitive search. Maximum 100 characters.                                                                                          |
 | `discount` | number | none    | Integer from `0` to `100`. Accepts values like `70` or `70%` and matches numeric or string discount values in MongoDB.                            |
-| `limit`    | number | `50`    | Integer from `1` to `100`.                                                                                                                        |
+| `limit`    | number | `9`     | Integer from `1` to `100`. Controls products per page.                                                                                            |
+| `page`     | number | `1`     | Integer from `1`. Controls the page number.                                                                                                       |
 
 Examples:
 
 ```bash
 curl "http://localhost:3000/api/products"
-curl "http://localhost:3000/api/products?category=Medicine&limit=20"
+curl "http://localhost:3000/api/products?category=Medicine&limit=9&page=2"
 curl "http://localhost:3000/api/products?name=aspirin"
 curl "http://localhost:3000/api/products?category=Medicine&discount=70"
 curl "http://localhost:3000/api/products/product-001"

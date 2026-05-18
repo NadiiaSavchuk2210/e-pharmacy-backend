@@ -5,6 +5,16 @@ import { escapeRegex } from '../common/utils/regex.util';
 import { QueryProductsDto } from './dto/query-products.dto';
 import { Product, type ProductDocument } from './schemas/product.schema';
 
+type ProductsPage = {
+  items: Product[];
+  meta: {
+    totalItems: number;
+    currentPage: number;
+    perPage: number;
+    totalPages: number;
+  };
+};
+
 @Injectable()
 export class ProductsService {
   constructor(
@@ -12,8 +22,9 @@ export class ProductsService {
     private readonly productModel: Model<ProductDocument>,
   ) {}
 
-  async findAll(query: QueryProductsDto) {
-    const { category, discount, name, limit = 50 } = query;
+  async findAll(query: QueryProductsDto): Promise<ProductsPage> {
+    const { category, discount, name, limit = 9, page = 1 } = query;
+    const skip = (page - 1) * limit;
 
     const filters: Record<string, unknown> = {};
 
@@ -37,11 +48,25 @@ export class ProductsService {
       };
     }
 
-    return this.productModel
-      .find(filters)
-      .sort({ name: 1 })
-      .limit(limit)
-      .lean();
+    const [items, totalItems] = await Promise.all([
+      this.productModel
+        .find(filters)
+        .sort({ name: 1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      this.productModel.countDocuments(filters),
+    ]);
+
+    return {
+      items,
+      meta: {
+        totalItems,
+        currentPage: page,
+        perPage: limit,
+        totalPages: Math.ceil(totalItems / limit),
+      },
+    };
   }
 
   async findOne(id: string) {
