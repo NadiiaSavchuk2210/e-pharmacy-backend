@@ -10,7 +10,10 @@ import {
   type StoreDocument,
   type StoreStatus,
 } from './schemas/store.schema';
-import { type StoreResponse } from './types/store-response.type';
+import {
+  type StoresListResponse,
+  type StoreResponse,
+} from './types/store-response.type';
 
 @Injectable()
 export class StoresService {
@@ -21,8 +24,9 @@ export class StoresService {
     private readonly nearestStoreModel: Model<NearestStoreDocument>,
   ) {}
 
-  async findAll(query: QueryStoresDto = {}): Promise<StoreResponse[]> {
-    const { limit = 50, random = false } = query;
+  async findAll(query: QueryStoresDto = {}): Promise<StoresListResponse> {
+    const { limit = 9, page = 1, random = false } = query;
+    const skip = (page - 1) * limit;
 
     if (random) {
       const stores = await this.storeModel.aggregate<Store>([
@@ -32,13 +36,20 @@ export class StoresService {
       return stores.map((store) => this.withDefaultStatus(store));
     }
 
-    const stores = await this.storeModel
-      .find()
-      .sort({ name: 1 })
-      .limit(limit)
-      .lean();
+    const [stores, totalItems] = await Promise.all([
+      this.storeModel.find().sort({ name: 1 }).skip(skip).limit(limit).lean(),
+      this.storeModel.countDocuments(),
+    ]);
 
-    return stores.map((store) => this.withDefaultStatus(store));
+    return {
+      items: stores.map((store) => this.withDefaultStatus(store)),
+      meta: {
+        totalItems,
+        currentPage: page,
+        perPage: limit,
+        totalPages: Math.max(1, Math.ceil(totalItems / limit)),
+      },
+    };
   }
 
   async findNearest(

@@ -64,7 +64,7 @@ export class ProductsService {
         totalItems,
         currentPage: page,
         perPage: limit,
-        totalPages: Math.ceil(totalItems / limit),
+        totalPages: Math.max(1, Math.ceil(totalItems / limit)),
       },
     };
   }

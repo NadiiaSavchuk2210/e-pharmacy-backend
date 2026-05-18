@@ -100,7 +100,7 @@ describe('ProductsService', () => {
     findMock.mockReturnValue({ sort: sortMock });
     countDocumentsMock.mockResolvedValue(0);
 
-    await service.findAll({
+    const result = await service.findAll({
       name: 'asp.*',
       limit: 10,
       page: 2,
@@ -114,6 +114,12 @@ describe('ProductsService', () => {
     });
     expect(skipMock).toHaveBeenCalledWith(10);
     expect(limitMock).toHaveBeenCalledWith(10);
+    expect(result.meta).toEqual({
+      totalItems: 0,
+      currentPage: 2,
+      perPage: 10,
+      totalPages: 1,
+    });
   });
 
   it('filters products by discount query values', async () => {
@@ -141,5 +147,96 @@ describe('ProductsService', () => {
         $in: [70, '70', '70%'],
       },
     });
+  });
+
+  it('uses page 1 and limit 9 to return the first products page', async () => {
+    const products = Array.from({ length: 9 }, (_, index) => ({
+      id: `product-${index + 1}`,
+    }));
+    const leanMock = jest.fn().mockResolvedValue(products);
+
+    limitMock.mockReturnValue({ lean: leanMock });
+    skipMock.mockReturnValue({ limit: limitMock });
+    sortMock.mockReturnValue({ skip: skipMock });
+    findMock.mockReturnValue({ sort: sortMock });
+    countDocumentsMock.mockResolvedValue(19);
+
+    const result = await service.findAll({ limit: 9, page: 1 });
+
+    expect(findMock).toHaveBeenCalledWith({});
+    expect(skipMock).toHaveBeenCalledWith(0);
+    expect(limitMock).toHaveBeenCalledWith(9);
+    expect(result).toEqual({
+      items: products,
+      meta: {
+        totalItems: 19,
+        currentPage: 1,
+        perPage: 9,
+        totalPages: 3,
+      },
+    });
+  });
+
+  it('uses page 2 and limit 9 to skip the first products page', async () => {
+    const products = Array.from({ length: 9 }, (_, index) => ({
+      id: `product-${index + 10}`,
+    }));
+    const leanMock = jest.fn().mockResolvedValue(products);
+
+    limitMock.mockReturnValue({ lean: leanMock });
+    skipMock.mockReturnValue({ limit: limitMock });
+    sortMock.mockReturnValue({ skip: skipMock });
+    findMock.mockReturnValue({ sort: sortMock });
+    countDocumentsMock.mockResolvedValue(19);
+
+    const result = await service.findAll({ limit: 9, page: 2 });
+
+    expect(skipMock).toHaveBeenCalledWith(9);
+    expect(limitMock).toHaveBeenCalledWith(9);
+    expect(result.meta).toEqual({
+      totalItems: 19,
+      currentPage: 2,
+      perPage: 9,
+      totalPages: 3,
+    });
+  });
+
+  it('applies category, name, and discount filters with pagination', async () => {
+    const filters = {
+      category: {
+        $regex: '^Medicine$',
+        $options: 'i',
+      },
+      name: {
+        $regex: 'aspirin',
+        $options: 'i',
+      },
+      discount: {
+        $in: [70, '70', '70%'],
+      },
+    };
+    const leanMock = jest
+      .fn()
+      .mockResolvedValue([{ id: 'product-10', name: 'Aspirin Plus' }]);
+
+    limitMock.mockReturnValue({ lean: leanMock });
+    skipMock.mockReturnValue({ limit: limitMock });
+    sortMock.mockReturnValue({ skip: skipMock });
+    findMock.mockReturnValue({ sort: sortMock });
+    countDocumentsMock.mockResolvedValue(11);
+
+    const result = await service.findAll({
+      category: 'Medicine',
+      name: 'aspirin',
+      discount: 70,
+      limit: 9,
+      page: 2,
+    });
+
+    expect(findMock).toHaveBeenCalledWith(filters);
+    expect(countDocumentsMock).toHaveBeenCalledWith(filters);
+    expect(skipMock).toHaveBeenCalledWith(9);
+    expect(limitMock).toHaveBeenCalledWith(9);
+    expect(result.meta.totalItems).toBe(11);
   });
 });

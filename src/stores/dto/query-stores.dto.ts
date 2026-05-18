@@ -33,7 +33,13 @@ export class QueryStoresDto {
   @IsInt()
   @Min(1)
   @Max(100)
-  limit?: number = 50;
+  limit?: number = 9;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number = 1;
 
   @IsOptional()
   @IsBoolean()
