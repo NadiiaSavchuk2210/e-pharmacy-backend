@@ -12,6 +12,7 @@ import { PRODUCT_CATEGORIES, type ProductCategory } from '../products.types';
 import {
   parseDiscount,
   parseLimit,
+  parsePage,
   normalizeCategory,
   trimQueryValue,
 } from './query-products.transformers';
@@ -41,4 +42,10 @@ export class QueryProductsDto {
   @Max(100)
   @Transform(parseLimit)
   limit?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Transform(parsePage)
+  page?: number;
 }
