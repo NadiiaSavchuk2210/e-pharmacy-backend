@@ -2,14 +2,17 @@ import { Controller, Get, Param, Query } from '@nestjs/common';
 import { QueryNearestStoresDto } from './dto/query-nearest-stores.dto';
 import { QueryStoresDto } from './dto/query-stores.dto';
 import { StoresService } from './stores.service';
-import { type StoreResponse } from './types/store-response.type';
+import {
+  type StoresListResponse,
+  type StoreResponse,
+} from './types/store-response.type';
 
 @Controller('stores')
 export class StoresController {
   constructor(private readonly storesService: StoresService) {}
 
   @Get()
-  findAll(@Query() query: QueryStoresDto): Promise<StoreResponse[]> {
+  findAll(@Query() query: QueryStoresDto): Promise<StoresListResponse> {
     return this.storesService.findAll(query);
   }
 

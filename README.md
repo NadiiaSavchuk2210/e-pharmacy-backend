@@ -173,6 +173,31 @@ curl "http://localhost:3000/api/products?category=Medicine&discount=70"
 curl "http://localhost:3000/api/products/product-001"
 ```
 
+Product list response:
+
+```json
+{
+  "items": [
+    {
+      "id": "product-001",
+      "photo": "https://example.com/product.png",
+      "name": "Aspirin",
+      "suppliers": "Acme Pharma",
+      "stock": "In Stock",
+      "price": "12.99",
+      "discount": 70,
+      "category": "Medicine"
+    }
+  ],
+  "meta": {
+    "totalItems": 42,
+    "currentPage": 1,
+    "perPage": 9,
+    "totalPages": 5
+  }
+}
+```
+
 Product fields:
 
 ```json
@@ -201,7 +226,8 @@ Store query parameters:
 
 | Endpoint                     | Parameter | Default | Rules                                                                                         |
 | ---------------------------- | --------- | ------- | --------------------------------------------------------------------------------------------- |
-| `/api/stores`                | `limit`   | `50`    | Integer from `1` to `100`. Use `limit=6&random=true` for the home page medicine stores block. |
+| `/api/stores`                | `limit`   | `9`     | Integer from `1` to `100`. Controls pharmacies per page. Use `limit=6&random=true` for the home page medicine stores block. |
+| `/api/stores`                | `page`    | `1`     | Integer from `1`. Controls the page number when `random` is not enabled.                      |
 | `/api/stores`                | `random`  | `false` | Boolean. When `true`, returns a random sample from the pharmacies collection.                 |
 | `/api/stores/nearest`        | `limit`   | `10`    | Integer from `1` to `100`.                                                                    |
 | `/api/stores/random-nearest` | `limit`   | `6`     | Integer from `1` to `100`. Controls the random sample size.                                   |
@@ -209,11 +235,35 @@ Store query parameters:
 Examples:
 
 ```bash
-curl "http://localhost:3000/api/stores?limit=25"
+curl "http://localhost:3000/api/stores?limit=9&page=2"
 curl "http://localhost:3000/api/stores?limit=6&random=true"
 curl "http://localhost:3000/api/stores/nearest?limit=5"
 curl "http://localhost:3000/api/stores/random-nearest?limit=6"
 curl "http://localhost:3000/api/stores/store-001"
+```
+
+Store list response:
+
+```json
+{
+  "items": [
+    {
+      "id": "store-001",
+      "name": "Central Pharmacy",
+      "address": "1 Main St",
+      "city": "Kyiv",
+      "phone": "+380991112233",
+      "rating": 4.8,
+      "status": "OPEN"
+    }
+  ],
+  "meta": {
+    "totalItems": 24,
+    "currentPage": 1,
+    "perPage": 9,
+    "totalPages": 3
+  }
+}
 ```
 
 Store fields:
