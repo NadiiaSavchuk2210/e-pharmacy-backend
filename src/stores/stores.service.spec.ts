@@ -1,5 +1,7 @@
 import { getModelToken } from '@nestjs/mongoose';
+import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { Types } from 'mongoose';
 import { NearestStore, Store } from './schemas/store.schema';
 import { StoresService } from './stores.service';
 
@@ -7,6 +9,7 @@ describe('StoresService', () => {
   let service: StoresService;
   let findMock: jest.Mock;
   let findOneMock: jest.Mock;
+  let findOneNearestMock: jest.Mock;
   let findNearestMock: jest.Mock;
   let countDocumentsMock: jest.Mock;
   let aggregateMock: jest.Mock;
@@ -20,6 +23,7 @@ describe('StoresService', () => {
   beforeEach(async () => {
     findMock = jest.fn();
     findOneMock = jest.fn();
+    findOneNearestMock = jest.fn();
     findNearestMock = jest.fn();
     countDocumentsMock = jest.fn();
     aggregateMock = jest.fn();
@@ -46,6 +50,7 @@ describe('StoresService', () => {
           provide: getModelToken(NearestStore.name),
           useValue: {
             find: findNearestMock,
+            findOne: findOneNearestMock,
             aggregate: aggregateNearestMock,
           },
         },
@@ -69,7 +74,7 @@ describe('StoresService', () => {
     countDocumentsMock.mockResolvedValue(23);
 
     await expect(service.findAll({ limit: 9, page: 2 })).resolves.toEqual({
-      items: [{ id: 'store-1', status: 'OPEN' }],
+      items: [{ id: 'store-1', isOpen: true }],
       meta: {
         totalItems: 23,
         currentPage: 2,
@@ -109,13 +114,37 @@ describe('StoresService', () => {
     aggregateMock.mockResolvedValue([{ id: 'store-1' }, { id: 'store-2' }]);
 
     await expect(service.findAll({ limit: 6, random: true })).resolves.toEqual([
-      { id: 'store-1', status: 'OPEN' },
-      { id: 'store-2', status: 'OPEN' },
+      { id: 'store-1', isOpen: true },
+      { id: 'store-2', isOpen: true },
     ]);
 
     expect(aggregateMock).toHaveBeenCalledWith([{ $sample: { size: 6 } }]);
     expect(findMock).not.toHaveBeenCalled();
     expect(countDocumentsMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps isOpen true in the response', async () => {
+    aggregateMock.mockResolvedValue([{ id: 'store-1', isOpen: true }]);
+
+    await expect(service.findAll({ random: true })).resolves.toEqual([
+      { id: 'store-1', isOpen: true },
+    ]);
+  });
+
+  it('keeps isOpen false in the response', async () => {
+    aggregateMock.mockResolvedValue([{ id: 'store-1', isOpen: false }]);
+
+    await expect(service.findAll({ random: true })).resolves.toEqual([
+      { id: 'store-1', isOpen: false },
+    ]);
+  });
+
+  it('defaults isOpen to true when it is missing', async () => {
+    aggregateMock.mockResolvedValue([{ id: 'store-1' }]);
+
+    await expect(service.findAll({ random: true })).resolves.toEqual([
+      { id: 'store-1', isOpen: true },
+    ]);
   });
 
   it('returns nearest pharmacies from the nearest_pharmacies model', async () => {
@@ -143,12 +172,12 @@ describe('StoresService', () => {
   it('returns a random nearest store sample with a default limit', async () => {
     aggregateNearestMock.mockResolvedValue([
       { id: 'nearest-1' },
-      { id: 'nearest-2', status: 'CLOSE' },
+      { id: 'nearest-2', isOpen: false },
     ]);
 
     await expect(service.findRandomNearest()).resolves.toEqual([
-      { id: 'nearest-1', status: 'OPEN' },
-      { id: 'nearest-2', status: 'CLOSE' },
+      { id: 'nearest-1', isOpen: true },
+      { id: 'nearest-2', isOpen: false },
     ]);
 
     expect(aggregateNearestMock).toHaveBeenCalledWith([
@@ -167,15 +196,90 @@ describe('StoresService', () => {
     ]);
   });
 
-  it('finds a store by public id', async () => {
+  it('finds a store from pharmacies by public id', async () => {
     const leanMock = jest.fn().mockResolvedValue({ id: 'store-1' });
     findOneMock.mockReturnValue({ lean: leanMock });
 
     await expect(service.findOne('store-1')).resolves.toEqual({
       id: 'store-1',
-      status: 'OPEN',
+      isOpen: true,
     });
 
     expect(findOneMock).toHaveBeenCalledWith({ $or: [{ id: 'store-1' }] });
+    expect(findOneNearestMock).not.toHaveBeenCalled();
+  });
+
+  it('finds a store from pharmacies by Mongo _id', async () => {
+    const objectId = new Types.ObjectId();
+    const leanMock = jest.fn().mockResolvedValue({ _id: objectId });
+    findOneMock.mockReturnValue({ lean: leanMock });
+
+    await expect(service.findOne(objectId.toHexString())).resolves.toEqual({
+      _id: objectId,
+      isOpen: true,
+    });
+
+    expect(findOneMock).toHaveBeenCalledWith({
+      $or: [{ id: objectId.toHexString() }, { _id: objectId }],
+    });
+    expect(findOneNearestMock).not.toHaveBeenCalled();
+  });
+
+  it('finds a store from nearest_pharmacies by public id', async () => {
+    const primaryLeanMock = jest.fn().mockResolvedValue(null);
+    const nearestLeanMock = jest.fn().mockResolvedValue({ id: 'nearest-1' });
+
+    findOneMock.mockReturnValue({ lean: primaryLeanMock });
+    findOneNearestMock.mockReturnValue({ lean: nearestLeanMock });
+
+    await expect(service.findOne('nearest-1')).resolves.toEqual({
+      id: 'nearest-1',
+      isOpen: true,
+    });
+
+    expect(findOneMock).toHaveBeenCalledWith({ $or: [{ id: 'nearest-1' }] });
+    expect(findOneNearestMock).toHaveBeenCalledWith({
+      $or: [{ id: 'nearest-1' }],
+    });
+  });
+
+  it('finds a store from nearest_pharmacies by Mongo _id', async () => {
+    const objectId = new Types.ObjectId();
+    const primaryLeanMock = jest.fn().mockResolvedValue(null);
+    const nearestLeanMock = jest.fn().mockResolvedValue({ _id: objectId });
+
+    findOneMock.mockReturnValue({ lean: primaryLeanMock });
+    findOneNearestMock.mockReturnValue({ lean: nearestLeanMock });
+
+    await expect(service.findOne(objectId.toHexString())).resolves.toEqual({
+      _id: objectId,
+      isOpen: true,
+    });
+
+    expect(findOneMock).toHaveBeenCalledWith({
+      $or: [{ id: objectId.toHexString() }, { _id: objectId }],
+    });
+    expect(findOneNearestMock).toHaveBeenCalledWith({
+      $or: [{ id: objectId.toHexString() }, { _id: objectId }],
+    });
+  });
+
+  it('throws NotFoundException when neither collection has the store', async () => {
+    const primaryLeanMock = jest.fn().mockResolvedValue(null);
+    const nearestLeanMock = jest.fn().mockResolvedValue(null);
+
+    findOneMock.mockReturnValue({ lean: primaryLeanMock });
+    findOneNearestMock.mockReturnValue({ lean: nearestLeanMock });
+
+    await expect(service.findOne('missing-store')).rejects.toThrow(
+      NotFoundException,
+    );
+
+    expect(findOneMock).toHaveBeenCalledWith({
+      $or: [{ id: 'missing-store' }],
+    });
+    expect(findOneNearestMock).toHaveBeenCalledWith({
+      $or: [{ id: 'missing-store' }],
+    });
   });
 });

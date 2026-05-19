@@ -3,7 +3,6 @@ import { HydratedDocument } from 'mongoose';
 
 export type StoreDocument = HydratedDocument<Store>;
 export type NearestStoreDocument = HydratedDocument<NearestStore>;
-export type StoreStatus = 'OPEN' | 'CLOSE';
 
 export class StoreBase {
   @Prop({ required: false, unique: true, trim: true })
@@ -24,8 +23,8 @@ export class StoreBase {
   @Prop({ required: true, min: 0, max: 5 })
   rating: number;
 
-  @Prop({ required: false, type: String, enum: ['OPEN', 'CLOSE'] })
-  status?: StoreStatus;
+  @Prop({ required: false, type: Boolean })
+  isOpen?: boolean;
 }
 
 @Schema({

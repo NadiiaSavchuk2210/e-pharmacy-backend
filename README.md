@@ -220,7 +220,7 @@ Product fields:
 | `GET`  | `/api/stores`                | No   | Returns pharmacies sorted by name.                                 |
 | `GET`  | `/api/stores/nearest`        | No   | Returns nearest pharmacies sorted by rating descending, then name. |
 | `GET`  | `/api/stores/random-nearest` | No   | Returns random nearest pharmacies from the database.               |
-| `GET`  | `/api/stores/:id`            | No   | Returns one pharmacy by public `id` or Mongo `_id`.                |
+| `GET`  | `/api/stores/:id`            | No   | Returns one store from `pharmacies` or `nearest_pharmacies` by public `id` or Mongo `_id`. |
 
 Store query parameters:
 
@@ -254,7 +254,7 @@ Store list response:
       "city": "Kyiv",
       "phone": "+380991112233",
       "rating": 4.8,
-      "status": "OPEN"
+      "isOpen": true
     }
   ],
   "meta": {
@@ -276,9 +276,12 @@ Store fields:
   "city": "Kyiv",
   "phone": "+380991112233",
   "rating": 4.8,
-  "status": "OPEN"
+  "isOpen": true
 }
 ```
+
+Store responses expose `isOpen` as the open/closed state for both
+`pharmacies` and `nearest_pharmacies` documents.
 
 ### Customer Reviews
 

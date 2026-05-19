@@ -1,6 +1,6 @@
-import { type StoreBase, type StoreStatus } from '../schemas/store.schema';
+import { type StoreBase } from '../schemas/store.schema';
 
-export type StoreResponse = StoreBase & { status: StoreStatus };
+export type StoreResponse = StoreBase & { isOpen: boolean };
 
 export type StoresPage = {
   items: StoreResponse[];

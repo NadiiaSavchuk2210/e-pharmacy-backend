@@ -8,7 +8,6 @@ import {
   type NearestStoreDocument,
   Store,
   type StoreDocument,
-  type StoreStatus,
 } from './schemas/store.schema';
 import {
   type StoresListResponse,
@@ -33,7 +32,7 @@ export class StoresService {
         { $sample: { size: limit } },
       ]);
 
-      return stores.map((store) => this.withDefaultStatus(store));
+      return stores.map((store) => this.withDefaultIsOpen(store));
     }
 
     const [stores, totalItems] = await Promise.all([
@@ -42,7 +41,7 @@ export class StoresService {
     ]);
 
     return {
-      items: stores.map((store) => this.withDefaultStatus(store)),
+      items: stores.map((store) => this.withDefaultIsOpen(store)),
       meta: {
         totalItems,
         currentPage: page,
@@ -63,7 +62,7 @@ export class StoresService {
       .limit(limit)
       .lean();
 
-    return stores.map((store) => this.withDefaultStatus(store));
+    return stores.map((store) => this.withDefaultIsOpen(store));
   }
 
   async findRandomNearest(
@@ -75,7 +74,7 @@ export class StoresService {
       { $sample: { size: limit } },
     ]);
 
-    return stores.map((store) => this.withDefaultStatus(store));
+    return stores.map((store) => this.withDefaultIsOpen(store));
   }
 
   async findOne(id: string): Promise<StoreResponse> {
@@ -85,18 +84,20 @@ export class StoresService {
       filters.push({ _id: new Types.ObjectId(id) });
     }
 
-    const store = await this.storeModel.findOne({ $or: filters }).lean();
+    const store =
+      (await this.storeModel.findOne({ $or: filters }).lean()) ??
+      (await this.nearestStoreModel.findOne({ $or: filters }).lean());
 
     if (!store) throw new NotFoundException('Store not found');
-    return this.withDefaultStatus(store);
+    return this.withDefaultIsOpen(store);
   }
 
-  private withDefaultStatus<T extends Store | NearestStore>(
+  private withDefaultIsOpen<T extends Store | NearestStore>(
     store: T,
-  ): T & { status: StoreStatus } {
+  ): T & { isOpen: boolean } {
     return {
       ...store,
-      status: store.status ?? 'OPEN',
+      isOpen: store.isOpen ?? true,
     };
   }
 }
