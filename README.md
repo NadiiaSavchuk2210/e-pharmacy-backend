@@ -1,7 +1,8 @@
 # E-Pharmacy Backend
 
 NestJS REST API for an e-pharmacy application. The service exposes catalog,
-pharmacy store, customer review, and authentication endpoints backed by MongoDB.
+pharmacy store, customer review, authentication, cart, and order endpoints
+backed by MongoDB.
 
 ## Live API
 
@@ -31,6 +32,12 @@ curl https://e-pharmacy-backend-z5z2.onrender.com/api
   store details.
 - Customer review listing sorted by newest first.
 - User registration, login, profile lookup, token refresh, and logout.
+- Protected cart management with add/update/remove item support.
+- Protected checkout flow that creates orders, clears carts, and atomically
+  decreases numeric product stock.
+- Protected order history and order status updates with allowed transition
+  checks.
+- Delivery quote calculation with a free-delivery threshold.
 - Access token authentication with `Authorization: Bearer <token>`.
 - Refresh token stored in an HTTP-only secure cookie.
 - Password hashing with Node.js `crypto.scrypt`.
@@ -61,11 +68,15 @@ src/
   app.module.ts                   Root module and MongoDB configuration
   main.ts                         App bootstrap, CORS, validation, filters
   common/
+    decorators/                   Shared metadata decorators
     filters/                      Global exception formatter
     interceptors/                 Global success response wrapper
+    types/                        Shared response types
     utils/                        Shared helpers
   config/                         Environment validation
+  cart/                           Cart, checkout, and delivery quote module
   customer-reviews/               Customer review module
+  orders/                         Order history and status module
   products/                       Product catalog module
   stores/                         Pharmacy store module
   token-blacklist/                Access token revocation service
@@ -384,6 +395,188 @@ fetch('https://e-pharmacy-backend-z5z2.onrender.com/api/user/login', {
 });
 ```
 
+### Cart
+
+All cart endpoints require `Authorization: Bearer <token>` and return raw data
+without the global success wrapper.
+
+| Method | Endpoint                   | Auth         | Description                                      |
+| ------ | -------------------------- | ------------ | ------------------------------------------------ |
+| `GET`  | `/api/cart`                | Bearer token | Returns the current user's cart.                 |
+| `PUT`  | `/api/cart/update`         | Bearer token | Adds, updates, or removes one cart item.         |
+| `POST` | `/api/cart/delivery-quote` | Bearer token | Returns delivery and additional fee estimates.   |
+| `POST` | `/api/cart/checkout`       | Bearer token | Creates an order from the cart and clears cart.  |
+
+Update cart body:
+
+```json
+{
+  "productId": "product-001",
+  "quantity": 2
+}
+```
+
+Set `quantity` to `0` to remove the product from the cart.
+
+Cart response:
+
+```json
+{
+  "items": [
+    {
+      "product": {
+        "id": "product-001",
+        "_id": "507f1f77bcf86cd799439011",
+        "photo": "https://example.com/product.png",
+        "name": "Aspirin",
+        "suppliers": "Acme Pharma",
+        "stock": "5",
+        "price": "12.50",
+        "category": "Medicine",
+        "discount": 0
+      },
+      "quantity": 2
+    }
+  ],
+  "totalItems": 2,
+  "totalPrice": 25
+}
+```
+
+Delivery quote body:
+
+```json
+{
+  "address": "Kyiv, Main 1",
+  "subtotal": 25
+}
+```
+
+Delivery quote response:
+
+```json
+{
+  "deliveryFee": 50,
+  "additionalFee": 0,
+  "message": "Delivery and extra fees are calculated based on shipping address"
+}
+```
+
+Checkout body:
+
+```json
+{
+  "shippingInfo": {
+    "name": "Nadiia S",
+    "email": "nadiia@example.com",
+    "phone": "+380991112233",
+    "address": "Kyiv, Main 1"
+  },
+  "paymentMethod": "cash_on_delivery",
+  "comment": "Call before delivery"
+}
+```
+
+Checkout response:
+
+```json
+{
+  "order": {
+    "id": "507f1f77bcf86cd799439012",
+    "items": [
+      {
+        "productId": "product-001",
+        "name": "Aspirin",
+        "price": 12.5,
+        "quantity": 2,
+        "total": 25
+      }
+    ],
+    "shippingInfo": {
+      "name": "Nadiia S",
+      "email": "nadiia@example.com",
+      "phone": "+380991112233",
+      "address": "Kyiv, Main 1"
+    },
+    "paymentMethod": "cash_on_delivery",
+    "subtotal": 25,
+    "deliveryFee": 50,
+    "additionalFee": 0,
+    "total": 75,
+    "status": "pending",
+    "createdAt": "2026-05-25T10:00:00.000Z"
+  }
+}
+```
+
+Cart implementation notes:
+
+- Cart-only pure helpers live in `src/cart/cart.helpers.ts`.
+- Shared order response types live in `src/common/types/order-response.types.ts`.
+- Shared order and shipping serializers live in
+  `src/common/utils/order-response.util.ts`.
+
+### Orders
+
+All order endpoints require `Authorization: Bearer <token>` and return raw data
+without the global success wrapper.
+
+| Method  | Endpoint                 | Auth         | Description                              |
+| ------- | ------------------------ | ------------ | ---------------------------------------- |
+| `GET`   | `/api/orders`            | Bearer token | Returns current user's order history.    |
+| `PATCH` | `/api/orders/:id/status` | Bearer token | Updates one order status when allowed.   |
+
+Order list response:
+
+```json
+{
+  "orders": [
+    {
+      "id": "507f1f77bcf86cd799439012",
+      "items": [
+        {
+          "productId": "product-001",
+          "name": "Aspirin",
+          "price": 12.5,
+          "quantity": 2,
+          "total": 25
+        }
+      ],
+      "shippingInfo": {
+        "name": "Nadiia S",
+        "email": "nadiia@example.com",
+        "phone": "+380991112233",
+        "address": "Kyiv, Main 1"
+      },
+      "paymentMethod": "cash_on_delivery",
+      "subtotal": 25,
+      "deliveryFee": 50,
+      "additionalFee": 0,
+      "total": 75,
+      "status": "pending",
+      "createdAt": "2026-05-25T10:00:00.000Z"
+    }
+  ]
+}
+```
+
+Update order status body:
+
+```json
+{
+  "status": "paid"
+}
+```
+
+Allowed status transitions:
+
+| Current     | Allowed next statuses      |
+| ----------- | -------------------------- |
+| `pending`   | `paid`, `cancelled`        |
+| `paid`      | `completed`, `cancelled`   |
+| `completed` | none                       |
+| `cancelled` | none                       |
+
 ## Response Format
 
 Successful responses are wrapped by the global response interceptor:
@@ -405,6 +598,9 @@ Successful responses are wrapped by the global response interceptor:
   "data": {}
 }
 ```
+
+Cart and order controllers opt out of this wrapper and return their documented
+payloads directly.
 
 Error responses are formatted by the global exception filter:
 
@@ -437,6 +633,8 @@ Common errors:
 | `nearest_pharmacies` | Nearest store listing | Indexed by rating/name and public id.      |
 | `reviews`            | Customer reviews      | Indexed by creation date.                  |
 | `users`              | Authentication        | Stores password hashes, not raw passwords. |
+| `carts`              | Cart module           | Stores one cart per authenticated user.    |
+| `orders`             | Orders module         | Stores checkout records and statuses.      |
 
 ## Available Scripts
 

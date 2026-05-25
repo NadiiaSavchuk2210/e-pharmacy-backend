@@ -17,9 +17,7 @@ export class AuthGuard implements CanActivate {
     const [scheme, token] = authHeader?.trim().split(/\s+/) ?? [];
 
     if (!scheme || scheme.toLowerCase() !== 'bearer' || !token) {
-      throw new UnauthorizedException(
-        'Missing or invalid authorization header',
-      );
+      throw new UnauthorizedException('Unauthorized');
     }
 
     try {
@@ -33,9 +31,7 @@ export class AuthGuard implements CanActivate {
       request.token = token;
       return true;
     } catch {
-      throw new UnauthorizedException(
-        'Invalid or expired authentication token',
-      );
+      throw new UnauthorizedException('Unauthorized');
     }
   }
 }
