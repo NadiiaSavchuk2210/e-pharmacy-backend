@@ -9,6 +9,8 @@ import { UserModule } from './user/user.module';
 import { TokenBlacklistService } from './token-blacklist/token-blacklist.service';
 import { StoresModule } from './stores/stores.module';
 import { CustomerReviewsModule } from './customer-reviews/customer-reviews.module';
+import { CartModule } from './cart/cart.module';
+import { OrdersModule } from './orders/orders.module';
 
 @Module({
   imports: [
@@ -27,6 +29,8 @@ import { CustomerReviewsModule } from './customer-reviews/customer-reviews.modul
     UserModule,
     StoresModule,
     CustomerReviewsModule,
+    CartModule,
+    OrdersModule,
   ],
   controllers: [AppController],
   providers: [AppService, TokenBlacklistService],

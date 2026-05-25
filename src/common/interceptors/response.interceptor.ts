@@ -7,16 +7,27 @@ import {
 import { Request, Response } from 'express';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
+import { SKIP_RESPONSE_WRAPPER_KEY } from '../decorators/skip-response-wrapper.decorator';
+
+type WrappedResponse<T> = {
+  statusCode: number;
+  message: string;
+  data: T;
+};
 
 @Injectable()
 export class ResponseInterceptor<T> implements NestInterceptor<
   T,
-  { statusCode: number; message: string; data: T }
+  T | WrappedResponse<T>
 > {
   intercept(
     context: ExecutionContext,
     next: CallHandler<T>,
-  ): Observable<{ statusCode: number; message: string; data: T }> {
+  ): Observable<T | WrappedResponse<T>> {
+    if (this.shouldSkipResponseWrapper(context)) {
+      return next.handle();
+    }
+
     const httpContext = context.switchToHttp();
     const response = httpContext.getResponse<Response>();
     const request = httpContext.getRequest<Request>();
@@ -27,6 +38,13 @@ export class ResponseInterceptor<T> implements NestInterceptor<
         message: this.getSuccessMessage(request.method, response.statusCode),
         data,
       })),
+    );
+  }
+
+  private shouldSkipResponseWrapper(context: ExecutionContext): boolean {
+    return Boolean(
+      Reflect.getMetadata(SKIP_RESPONSE_WRAPPER_KEY, context.getHandler()) ??
+      Reflect.getMetadata(SKIP_RESPONSE_WRAPPER_KEY, context.getClass()),
     );
   }
 
