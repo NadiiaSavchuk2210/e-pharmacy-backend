@@ -4,6 +4,7 @@ import {
   ExceptionFilter,
   HttpException,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { Error as MongooseError } from 'mongoose';
@@ -15,12 +16,18 @@ type MongoDuplicateKeyError = Error & {
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
+  private readonly logger = new Logger(AllExceptionsFilter.name);
+
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
 
     const { statusCode, message } = this.formatException(exception);
+
+    if (this.shouldLogUnhandledException(exception)) {
+      this.logUnhandledException(exception, request);
+    }
 
     response.status(statusCode).json({
       statusCode,
@@ -107,6 +114,29 @@ export class AllExceptionsFilter implements ExceptionFilter {
       'code' in exception &&
       (exception as MongoDuplicateKeyError).code === 11000
     );
+  }
+
+  private shouldLogUnhandledException(exception: unknown): boolean {
+    return (
+      !(exception instanceof HttpException) &&
+      !(exception instanceof MongooseError.ValidationError) &&
+      !(exception instanceof MongooseError.CastError) &&
+      !this.isDuplicateKeyError(exception)
+    );
+  }
+
+  private logUnhandledException(exception: unknown, request: Request): void {
+    const messagePrefix = `Unhandled exception during ${request.method} ${request.url}`;
+
+    if (exception instanceof Error) {
+      this.logger.error(
+        `${messagePrefix}: ${exception.message}`,
+        exception.stack,
+      );
+      return;
+    }
+
+    this.logger.error(`${messagePrefix}: ${String(exception)}`);
   }
 }
 

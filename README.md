@@ -135,6 +135,17 @@ AUTH_TOKEN_TTL=3600
 AUTH_REFRESH_TOKEN_TTL=2592000
 ```
 
+Keep MongoDB credentials in the backend environment only. Do not copy
+`MONGODB_URI` or database credentials into frontend `.env` files.
+
+Checkout uses MongoDB transactions in production. Local/non-production
+standalone MongoDB instances that do not support transactions fall back to a
+sequential checkout path so development checkout can still create the order,
+decrement stock, and clear the cart.
+
+For production/deployment, `MONGODB_URI` must point to MongoDB Atlas or another
+replica set deployment.
+
 ### Run Locally
 
 ```bash
@@ -407,6 +418,16 @@ without the global success wrapper.
 | `POST` | `/api/cart/delivery-quote` | Bearer token | Returns delivery and additional fee estimates.   |
 | `POST` | `/api/cart/checkout`       | Bearer token | Creates an order from the cart and clears cart.  |
 
+Recommended checkout flow:
+
+1. Use `PUT /api/cart/update` whenever the user adds, removes, or changes a
+   product quantity.
+2. Use `GET /api/cart` to render or confirm the authenticated user's saved
+   server-side cart.
+3. Call `POST /api/cart/checkout` with shipping and payment details only.
+   The backend reads cart items from MongoDB, fetches current product data, and
+   calculates prices server-side.
+
 Update cart body:
 
 ```json
@@ -464,6 +485,10 @@ Delivery quote response:
 
 Checkout body:
 
+Checkout uses the authenticated user's server-side cart. Do not send `items`
+or prices in this request; add/update products first with `PUT /api/cart/update`
+and confirm them with `GET /api/cart` when needed.
+
 ```json
 {
   "shippingInfo": {
@@ -508,6 +533,17 @@ Checkout response:
   }
 }
 ```
+
+Checkout troubleshooting:
+
+- `property items should not exist`: the client sent `items` to checkout.
+  Remove `items` from the checkout body.
+- `Cart is empty`: the authenticated user's server-side cart has no saved
+  items. Call `PUT /api/cart/update` with the same bearer token, then verify
+  with `GET /api/cart`.
+- `Not enough stock`: requested quantity is larger than current product stock.
+- `Internal server error`: check backend logs; unexpected errors are logged
+  with stack traces by the global exception filter.
 
 Cart implementation notes:
 
