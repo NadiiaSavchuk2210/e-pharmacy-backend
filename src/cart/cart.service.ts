@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
@@ -33,6 +34,7 @@ import {
   Order,
   type OrderDocument,
   type OrderItem,
+  type OrderStatus,
 } from './schemas/order.schema';
 import type {
   CartItemRecord,
@@ -46,6 +48,8 @@ import type {
 
 @Injectable()
 export class CartService {
+  private readonly logger = new Logger(CartService.name);
+
   constructor(
     @InjectModel(Cart.name)
     private readonly cartModel: Model<CartDocument>,
@@ -99,82 +103,33 @@ export class CartService {
     userId: string,
     checkoutCartDto: CheckoutCartInput,
   ): Promise<CheckoutResponse> {
-    let createdOrder: OrderDocument | null = null;
+    try {
+      const createdOrder = await this.checkoutWithTransaction(
+        userId,
+        checkoutCartDto,
+      );
 
-    await this.connection.transaction(async (session) => {
-      const cart = await this.cartModel.findOne({ userId }).session(session);
-      const cartItems = toCartItemRecords(cart?.items ?? []);
-
-      if (!cart || cartItems.length === 0) {
-        throw new BadRequestException('Cart is empty');
+      return {
+        order: serializeOrder(createdOrder),
+      };
+    } catch (error) {
+      if (!this.shouldRetryCheckoutWithoutTransaction(error)) {
+        throw error;
       }
 
-      const productsById = await this.getProductsByCartItemId(
-        cartItems,
-        session,
-      );
-      const orderItems = cartItems.map((item) => {
-        const product = productsById.get(item.productId);
-
-        if (!product) {
-          throw new NotFoundException('Product not found');
-        }
-
-        assertEnoughStock(product, item.quantity);
-
-        const price = parsePrice(product.price);
-
-        return {
-          product,
-          orderItem: {
-            productId: getCanonicalProductId(product),
-            name: product.name,
-            price,
-            quantity: item.quantity,
-            total: roundMoney(price * item.quantity),
-          },
-        };
-      });
-      const subtotal = roundMoney(
-        orderItems.reduce((total, item) => total + item.orderItem.total, 0),
-      );
-      const shippingInfo = serializeShippingInfo(checkoutCartDto.shippingInfo);
-      const { deliveryFee, additionalFee } = calculateDeliveryFees(
-        shippingInfo.address,
-        subtotal,
-      );
-      const total = roundMoney(subtotal + deliveryFee + additionalFee);
-      const [order] = await this.orderModel.create(
-        [
-          {
-            userId,
-            items: orderItems.map((item) => item.orderItem),
-            shippingInfo,
-            paymentMethod: checkoutCartDto.paymentMethod,
-            subtotal,
-            deliveryFee,
-            additionalFee,
-            total,
-            comment: checkoutCartDto.comment ?? '',
-            status: 'pending',
-          },
-        ],
-        { session },
+      this.logger.warn(
+        'MongoDB transactions are unavailable; retrying checkout without a transaction. Configure MONGODB_URI to use MongoDB Atlas or a replica set for transactional checkout.',
       );
 
-      await this.decreaseProductStock(orderItems, session);
-      cart.set('items', []);
-      await cart.save({ session });
-      createdOrder = order;
-    });
+      const createdOrder = await this.createOrderFromCart(
+        userId,
+        checkoutCartDto,
+      );
 
-    if (!createdOrder) {
-      throw new BadRequestException('Unable to create order');
+      return {
+        order: serializeOrder(createdOrder),
+      };
     }
-
-    return {
-      order: serializeOrder(createdOrder),
-    };
   }
 
   getDeliveryQuote(address: string, subtotal = 0): DeliveryQuoteResponse {
@@ -202,6 +157,99 @@ export class CartService {
       userId,
       items: [],
     });
+  }
+
+  private async checkoutWithTransaction(
+    userId: string,
+    checkoutCartDto: CheckoutCartInput,
+  ): Promise<OrderDocument> {
+    const order = await this.connection.transaction((session) =>
+      this.createOrderFromCart(userId, checkoutCartDto, session),
+    );
+
+    if (!order) {
+      throw new BadRequestException('Unable to create order');
+    }
+
+    return order;
+  }
+
+  private async createOrderFromCart(
+    userId: string,
+    checkoutCartDto: CheckoutCartInput,
+    session?: ClientSession,
+  ): Promise<OrderDocument> {
+    const cartQuery = this.cartModel.findOne({ userId });
+    const cart = session ? await cartQuery.session(session) : await cartQuery;
+    const cartItems = toCartItemRecords(cart?.items ?? []);
+
+    if (!cart || cartItems.length === 0) {
+      throw new BadRequestException('Cart is empty');
+    }
+
+    const productsById = await this.getProductsByCartItemId(cartItems, session);
+    const orderItems = cartItems.map((item) => {
+      const product = productsById.get(item.productId);
+
+      if (!product) {
+        throw new NotFoundException('Product not found');
+      }
+
+      assertEnoughStock(product, item.quantity);
+
+      const price = parsePrice(product.price);
+
+      return {
+        product,
+        orderItem: {
+          productId: getCanonicalProductId(product),
+          name: product.name,
+          price,
+          quantity: item.quantity,
+          total: roundMoney(price * item.quantity),
+        },
+      };
+    });
+    const subtotal = roundMoney(
+      orderItems.reduce((total, item) => total + item.orderItem.total, 0),
+    );
+    const shippingInfo = serializeShippingInfo(checkoutCartDto.shippingInfo);
+    const { deliveryFee, additionalFee } = calculateDeliveryFees(
+      shippingInfo.address,
+      subtotal,
+    );
+    const total = roundMoney(subtotal + deliveryFee + additionalFee);
+    const orderPayload = {
+      userId,
+      items: orderItems.map((item) => item.orderItem),
+      shippingInfo,
+      paymentMethod: checkoutCartDto.paymentMethod,
+      subtotal,
+      deliveryFee,
+      additionalFee,
+      total,
+      comment: checkoutCartDto.comment ?? '',
+      status: 'pending' as OrderStatus,
+    };
+    const [order] = await this.orderModel.create(
+      [orderPayload],
+      session ? { session } : {},
+    );
+
+    if (!order) {
+      throw new BadRequestException('Unable to create order');
+    }
+
+    await this.decreaseProductStock(orderItems, session);
+    cart.set('items', []);
+
+    if (session) {
+      await cart.save({ session });
+    } else {
+      await cart.save();
+    }
+
+    return order;
   }
 
   private async findProductById(
@@ -292,7 +340,7 @@ export class CartService {
       product: ProductRecord;
       orderItem: OrderItem;
     }>,
-    session: ClientSession,
+    session?: ClientSession,
   ): Promise<void> {
     const updateResults = await Promise.all(
       orderItems.map(({ product, orderItem }) => {
@@ -300,16 +348,48 @@ export class CartService {
           return Promise.resolve({ modifiedCount: 1 });
         }
 
-        return this.productModel.updateOne(
-          buildAtomicStockDecrementFilter(product._id, orderItem.quantity),
-          buildAtomicStockDecrementUpdate(orderItem.quantity),
-          { session },
+        const filter = buildAtomicStockDecrementFilter(
+          product._id,
+          orderItem.quantity,
         );
+        const update = buildAtomicStockDecrementUpdate(orderItem.quantity);
+
+        return session
+          ? this.productModel.updateOne(filter, update, {
+              session,
+              updatePipeline: true,
+            })
+          : this.productModel.updateOne(filter, update, {
+              updatePipeline: true,
+            });
       }),
     );
 
     if (updateResults.some((result) => result.modifiedCount !== 1)) {
       throw new BadRequestException('Not enough stock');
     }
+  }
+
+  private shouldRetryCheckoutWithoutTransaction(error: unknown): boolean {
+    return (
+      process.env.NODE_ENV !== 'production' &&
+      this.isTransactionUnsupportedError(error)
+    );
+  }
+
+  private isTransactionUnsupportedError(error: unknown): boolean {
+    if (!(error instanceof Error)) {
+      return false;
+    }
+
+    const message = error.message.toLowerCase();
+
+    return (
+      message.includes(
+        'transaction numbers are only allowed on a replica set member or mongos',
+      ) ||
+      message.includes('transactions are not supported') ||
+      message.includes('current topology does not support sessions')
+    );
   }
 }

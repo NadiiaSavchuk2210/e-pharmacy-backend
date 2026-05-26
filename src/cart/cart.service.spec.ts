@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Product } from '../products/schemas/product.schema';
@@ -330,7 +331,7 @@ describe('CartService', () => {
           },
         },
       ],
-      { session },
+      { session, updatePipeline: true },
     );
     expect(cartDoc.set).toHaveBeenCalledWith('items', []);
     expect(cartDoc.save).toHaveBeenCalledWith({ session });
@@ -361,6 +362,150 @@ describe('CartService', () => {
         createdAt: '2026-05-25T10:00:00.000Z',
       },
     });
+  });
+
+  it('falls back to sequential checkout in non-production when transactions are unavailable', async () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    const loggerWarnSpy = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    const cartDoc = createCartDoc([
+      {
+        productId: 'product-1',
+        quantity: 2,
+      },
+    ]);
+    const createdAt = new Date('2026-05-25T10:00:00.000Z');
+
+    process.env.NODE_ENV = 'development';
+    connectionTransactionMock.mockRejectedValueOnce(
+      new Error(
+        'Transaction numbers are only allowed on a replica set member or mongos',
+      ),
+    );
+    cartFindOneMock.mockResolvedValue(cartDoc);
+    productFindMock.mockReturnValue(leanResult([product]));
+    orderCreateMock.mockResolvedValue([
+      {
+        _id: 'order-1',
+        items: [
+          {
+            productId: 'product-1',
+            name: 'Aspirin',
+            price: 12.5,
+            quantity: 2,
+            total: 25,
+          },
+        ],
+        shippingInfo: {
+          name: 'Test User',
+          email: 'test@example.com',
+          phone: '+380991112233',
+          address: 'Kyiv, Main 1',
+        },
+        paymentMethod: 'cash_on_delivery',
+        subtotal: 25,
+        deliveryFee: 50,
+        additionalFee: 0,
+        total: 75,
+        status: 'pending',
+        createdAt,
+      },
+    ]);
+    productUpdateOneMock.mockResolvedValue({ modifiedCount: 1 });
+
+    try {
+      const result = await service.checkout('user-1', {
+        shippingInfo: {
+          name: 'Test User',
+          email: 'test@example.com',
+          phone: '+380991112233',
+          address: 'Kyiv, Main 1',
+        },
+        paymentMethod: 'cash_on_delivery',
+        comment: '',
+      });
+
+      expect(connectionTransactionMock).toHaveBeenCalledTimes(1);
+      expect(loggerWarnSpy).toHaveBeenCalledWith(
+        'MongoDB transactions are unavailable; retrying checkout without a transaction. Configure MONGODB_URI to use MongoDB Atlas or a replica set for transactional checkout.',
+      );
+      expect(orderCreateMock).toHaveBeenCalledWith(
+        [
+          {
+            userId: 'user-1',
+            items: [
+              {
+                productId: 'product-1',
+                name: 'Aspirin',
+                price: 12.5,
+                quantity: 2,
+                total: 25,
+              },
+            ],
+            shippingInfo: {
+              name: 'Test User',
+              email: 'test@example.com',
+              phone: '+380991112233',
+              address: 'Kyiv, Main 1',
+            },
+            paymentMethod: 'cash_on_delivery',
+            subtotal: 25,
+            deliveryFee: 50,
+            additionalFee: 0,
+            total: 75,
+            comment: '',
+            status: 'pending',
+          },
+        ],
+        {},
+      );
+      expect(productUpdateOneMock).toHaveBeenCalledWith(
+        {
+          _id: 'mongo-product-1',
+          $expr: {
+            $gte: [
+              {
+                $convert: {
+                  input: '$stock',
+                  to: 'int',
+                  onError: -1,
+                  onNull: -1,
+                },
+              },
+              2,
+            ],
+          },
+        },
+        [
+          {
+            $set: {
+              stock: {
+                $toString: {
+                  $subtract: [
+                    {
+                      $convert: {
+                        input: '$stock',
+                        to: 'int',
+                        onError: 0,
+                        onNull: 0,
+                      },
+                    },
+                    2,
+                  ],
+                },
+              },
+            },
+          },
+        ],
+        { updatePipeline: true },
+      );
+      expect(cartDoc.save).toHaveBeenCalledWith();
+      expect(result.order.total).toBe(75);
+    } finally {
+      process.env.NODE_ENV = previousNodeEnv;
+      loggerWarnSpy.mockRestore();
+    }
   });
 
   it('returns a delivery quote for a shipping address', () => {

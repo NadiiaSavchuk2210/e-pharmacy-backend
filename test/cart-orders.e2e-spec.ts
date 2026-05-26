@@ -78,6 +78,24 @@ function createCartDoc(items: CartItemFixture[]) {
   return doc;
 }
 
+type CartDocFixture = ReturnType<typeof createCartDoc>;
+
+function cartFindOneResult(getCart: () => CartDocFixture | null) {
+  const resolveCart = () => Promise.resolve(getCart());
+
+  return {
+    lean: jest.fn(async () => {
+      const cart = getCart();
+
+      return cart ? { items: cart.items } : null;
+    }),
+    session: jest.fn(resolveCart),
+    then: (onFulfilled, onRejected) =>
+      resolveCart().then(onFulfilled, onRejected),
+    catch: (onRejected) => resolveCart().catch(onRejected),
+  };
+}
+
 describe('Cart and Orders HTTP flow (e2e)', () => {
   let app: INestApplication<App> & NestExpressApplication;
   let cartFindOneMock: jest.Mock;
@@ -189,6 +207,135 @@ describe('Cart and Orders HTTP flow (e2e)', () => {
       });
   });
 
+  it('updates, reads, and checks out the authenticated user server-side cart', async () => {
+    let savedCart: CartDocFixture | null = null;
+    const createdAt = new Date('2026-05-25T10:00:00.000Z');
+
+    cartFindOneMock.mockImplementation(() =>
+      cartFindOneResult(() => savedCart),
+    );
+    cartCreateMock.mockImplementation(async ({ items }) => {
+      savedCart = createCartDoc(items);
+      return savedCart;
+    });
+    productFindOneMock.mockReturnValue(queryResult(product));
+    productFindMock.mockReturnValue(queryResult([product]));
+    productUpdateOneMock.mockResolvedValue({ modifiedCount: 1 });
+    orderCreateMock.mockResolvedValue([
+      {
+        _id: '66544c51aa4ad43070b1df10',
+        items: [
+          {
+            productId: 'product-1',
+            name: 'Aspirin',
+            price: 12.5,
+            quantity: 2,
+            total: 25,
+          },
+        ],
+        shippingInfo: {
+          name: 'Test User',
+          email: 'test@example.com',
+          phone: '+380991112233',
+          address: 'Kyiv, Main 1',
+        },
+        paymentMethod: 'cash_on_delivery',
+        subtotal: 25,
+        deliveryFee: 50,
+        additionalFee: 0,
+        total: 75,
+        status: 'pending',
+        createdAt,
+      },
+    ]);
+
+    await request(app.getHttpServer())
+      .put('/api/cart/update')
+      .set('Authorization', 'Bearer test-token')
+      .send({
+        productId: 'product-1',
+        quantity: 2,
+      })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.items).toHaveLength(1);
+        expect(body.items[0].quantity).toBe(2);
+        expect(body.totalItems).toBe(2);
+      });
+
+    await request(app.getHttpServer())
+      .get('/api/cart')
+      .set('Authorization', 'Bearer test-token')
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.items).toHaveLength(1);
+        expect(body.items[0].product.id).toBe('product-1');
+        expect(body.totalPrice).toBe(25);
+      });
+
+    await request(app.getHttpServer())
+      .post('/api/cart/checkout')
+      .set('Authorization', 'Bearer test-token')
+      .send({
+        shippingInfo: {
+          name: 'Test User',
+          email: 'test@example.com',
+          phone: '+380991112233',
+          address: 'Kyiv, Main 1',
+        },
+        paymentMethod: 'cash_on_delivery',
+        comment: '',
+      })
+      .expect(201)
+      .expect(({ body }) => {
+        expect(orderCreateMock).toHaveBeenCalledWith(
+          [
+            expect.objectContaining({
+              userId: 'user-1',
+              paymentMethod: 'cash_on_delivery',
+              subtotal: 25,
+              total: 75,
+            }),
+          ],
+          { session },
+        );
+        expect(savedCart?.items).toEqual([]);
+        expect(body.order.items[0]).toEqual({
+          productId: 'product-1',
+          name: 'Aspirin',
+          price: 12.5,
+          quantity: 2,
+          total: 25,
+        });
+      });
+  });
+
+  it('rejects checkout items because checkout uses the server-side cart', () => {
+    return request(app.getHttpServer())
+      .post('/api/cart/checkout')
+      .set('Authorization', 'Bearer test-token')
+      .send({
+        items: [
+          {
+            productId: 'product-1',
+            quantity: 2,
+          },
+        ],
+        shippingInfo: {
+          name: 'Test User',
+          email: 'test@example.com',
+          phone: '+380991112233',
+          address: 'Kyiv, Main 1',
+        },
+        paymentMethod: 'cash_on_delivery',
+      })
+      .expect(400)
+      .expect(({ body }) => {
+        expect(body.message).toContain('property items should not exist');
+        expect(connectionTransactionMock).not.toHaveBeenCalled();
+      });
+  });
+
   it('checks out the current cart transactionally through the real HTTP layer', () => {
     const cartDoc = createCartDoc([
       {
@@ -283,7 +430,7 @@ describe('Cart and Orders HTTP flow (e2e)', () => {
               },
             },
           ],
-          { session },
+          { session, updatePipeline: true },
         );
         expect(cartDoc.save).toHaveBeenCalledWith({ session });
         expect(body.order.total).toBe(75);
