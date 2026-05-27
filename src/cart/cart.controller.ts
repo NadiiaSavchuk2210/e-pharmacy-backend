@@ -37,10 +37,13 @@ export class CartController {
 
   @Post('delivery-quote')
   @HttpCode(200)
-  getDeliveryQuote(@Body() deliveryQuoteDto: DeliveryQuoteDto) {
+  getDeliveryQuote(
+    @Req() request: AuthenticatedRequest,
+    @Body() deliveryQuoteDto: DeliveryQuoteDto,
+  ) {
     return this.cartService.getDeliveryQuote(
+      request.user.sub,
       deliveryQuoteDto.address,
-      deliveryQuoteDto.subtotal,
     );
   }
 

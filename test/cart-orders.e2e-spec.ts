@@ -189,18 +189,32 @@ describe('Cart and Orders HTTP flow (e2e)', () => {
   });
 
   it('quotes delivery fees through the real HTTP layer', () => {
+    cartFindOneMock.mockReturnValue(
+      queryResult({
+        items: [
+          {
+            productId: 'product-1',
+            quantity: 40,
+          },
+        ],
+      }),
+    );
+    productFindMock.mockReturnValue(queryResult([product]));
+
     return request(app.getHttpServer())
       .post('/api/cart/delivery-quote')
       .set('Authorization', 'Bearer test-token')
       .send({
         address: 'Kyiv, Main 1',
-        subtotal: 500,
       })
       .expect(200)
       .expect(({ body }) => {
         expect(body).toEqual({
+          subtotal: 500,
           deliveryFee: 0,
           additionalFee: 0,
+          freeDeliveryThreshold: 500,
+          amountToFreeDelivery: 0,
           message:
             'Delivery and extra fees are calculated based on shipping address',
         });

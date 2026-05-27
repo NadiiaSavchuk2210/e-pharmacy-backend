@@ -7,8 +7,8 @@ import type {
   ProductRecord,
 } from './types/cart.types';
 
-const BASE_DELIVERY_FEE = 50;
-const FREE_DELIVERY_SUBTOTAL = 500;
+export const BASE_DELIVERY_FEE = 50;
+export const FREE_DELIVERY_SUBTOTAL = 500;
 
 export function updateCartItems(
   currentItems: CartItemRecord[],
@@ -131,13 +131,20 @@ export function calculateDeliveryFees(
 ): {
   deliveryFee: number;
   additionalFee: number;
+  freeDeliveryThreshold: number;
+  amountToFreeDelivery: number;
 } {
   const hasShippingAddress = address.trim().length > 0;
-  const hasFreeDelivery = subtotal >= FREE_DELIVERY_SUBTOTAL;
+  const normalizedSubtotal = roundMoney(Math.max(0, subtotal));
+  const hasFreeDelivery = normalizedSubtotal >= FREE_DELIVERY_SUBTOTAL;
 
   return {
     deliveryFee: hasShippingAddress && !hasFreeDelivery ? BASE_DELIVERY_FEE : 0,
     additionalFee: 0,
+    freeDeliveryThreshold: FREE_DELIVERY_SUBTOTAL,
+    amountToFreeDelivery: hasFreeDelivery
+      ? 0
+      : roundMoney(FREE_DELIVERY_SUBTOTAL - normalizedSubtotal),
   };
 }
 

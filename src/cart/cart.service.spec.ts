@@ -508,19 +508,53 @@ describe('CartService', () => {
     }
   });
 
-  it('returns a delivery quote for a shipping address', () => {
-    expect(service.getDeliveryQuote('Kyiv, Main 1')).toEqual({
+  it('returns a delivery quote for the server-side cart', async () => {
+    cartFindOneMock.mockReturnValue(
+      leanResult({
+        items: [
+          {
+            productId: 'product-1',
+            quantity: 2,
+          },
+        ],
+      }),
+    );
+    productFindMock.mockReturnValue(leanResult([product]));
+
+    await expect(
+      service.getDeliveryQuote('user-1', 'Kyiv, Main 1'),
+    ).resolves.toEqual({
+      subtotal: 25,
       deliveryFee: 50,
       additionalFee: 0,
+      freeDeliveryThreshold: 500,
+      amountToFreeDelivery: 475,
       message:
         'Delivery and extra fees are calculated based on shipping address',
     });
   });
 
-  it('returns free delivery when subtotal reaches the free delivery threshold', () => {
-    expect(service.getDeliveryQuote('Kyiv, Main 1', 500)).toEqual({
+  it('returns free delivery when the server-side cart reaches the free delivery threshold', async () => {
+    cartFindOneMock.mockReturnValue(
+      leanResult({
+        items: [
+          {
+            productId: 'product-1',
+            quantity: 40,
+          },
+        ],
+      }),
+    );
+    productFindMock.mockReturnValue(leanResult([product]));
+
+    await expect(
+      service.getDeliveryQuote('user-1', 'Kyiv, Main 1'),
+    ).resolves.toEqual({
+      subtotal: 500,
       deliveryFee: 0,
       additionalFee: 0,
+      freeDeliveryThreshold: 500,
+      amountToFreeDelivery: 0,
       message:
         'Delivery and extra fees are calculated based on shipping address',
     });

@@ -52,7 +52,10 @@ export type CheckoutResponse = {
 };
 
 export type DeliveryQuoteResponse = {
+  subtotal: number;
   deliveryFee: number;
   additionalFee: number;
+  freeDeliveryThreshold: number;
+  amountToFreeDelivery: number;
   message: string;
 };
