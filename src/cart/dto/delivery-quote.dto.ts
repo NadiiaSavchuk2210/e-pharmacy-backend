@@ -1,12 +1,5 @@
 import { Transform } from 'class-transformer';
-import {
-  IsNotEmpty,
-  IsNumber,
-  IsOptional,
-  IsString,
-  MaxLength,
-  Min,
-} from 'class-validator';
+import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
 
 const trimString = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
@@ -17,13 +10,4 @@ export class DeliveryQuoteDto {
   @MaxLength(250)
   @Transform(trimString)
   address: string;
-
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  @Transform(({ value }: { value: unknown }) =>
-    typeof value === 'string' ? Number(value) : value,
-  )
-  // Deprecated: quotes are calculated from the server-side cart.
-  subtotal?: number;
 }

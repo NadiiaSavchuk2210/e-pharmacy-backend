@@ -472,8 +472,7 @@ Delivery quote body:
 }
 ```
 
-Delivery quotes use the authenticated user's server-side cart subtotal. A
-legacy `subtotal` field is still accepted but ignored.
+Delivery quotes use the authenticated user's server-side cart subtotal.
 
 Delivery quote response:
 
