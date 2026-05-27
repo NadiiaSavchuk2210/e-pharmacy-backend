@@ -79,20 +79,27 @@ function createCartDoc(items: CartItemFixture[]) {
 }
 
 type CartDocFixture = ReturnType<typeof createCartDoc>;
+type CartLeanFixture = { items: CartItemFixture[] } | null;
 
 function cartFindOneResult(getCart: () => CartDocFixture | null) {
-  const resolveCart = () => Promise.resolve(getCart());
+  const resolveCart = (): Promise<CartDocFixture | null> =>
+    Promise.resolve(getCart());
 
   return {
-    lean: jest.fn(async () => {
+    lean: jest.fn(() => {
       const cart = getCart();
 
-      return cart ? { items: cart.items } : null;
+      return Promise.resolve<CartLeanFixture>(
+        cart ? { items: cart.items } : null,
+      );
     }),
     session: jest.fn(resolveCart),
-    then: (onFulfilled, onRejected) =>
-      resolveCart().then(onFulfilled, onRejected),
-    catch: (onRejected) => resolveCart().catch(onRejected),
+    then: (
+      onFulfilled?: ((value: CartDocFixture | null) => unknown) | null,
+      onRejected?: ((reason: unknown) => unknown) | null,
+    ) => resolveCart().then(onFulfilled, onRejected),
+    catch: (onRejected?: ((reason: unknown) => unknown) | null) =>
+      resolveCart().catch(onRejected),
   };
 }
 
@@ -221,6 +228,21 @@ describe('Cart and Orders HTTP flow (e2e)', () => {
       });
   });
 
+  it('rejects client-provided subtotal for delivery quotes', () => {
+    return request(app.getHttpServer())
+      .post('/api/cart/delivery-quote')
+      .set('Authorization', 'Bearer test-token')
+      .send({
+        address: 'Kyiv, Main 1',
+        subtotal: 500,
+      })
+      .expect(400)
+      .expect(({ body }) => {
+        expect(body.message).toContain('property subtotal should not exist');
+        expect(cartFindOneMock).not.toHaveBeenCalled();
+      });
+  });
+
   it('updates, reads, and checks out the authenticated user server-side cart', async () => {
     let savedCart: CartDocFixture | null = null;
     const createdAt = new Date('2026-05-25T10:00:00.000Z');
@@ -228,10 +250,12 @@ describe('Cart and Orders HTTP flow (e2e)', () => {
     cartFindOneMock.mockImplementation(() =>
       cartFindOneResult(() => savedCart),
     );
-    cartCreateMock.mockImplementation(async ({ items }) => {
-      savedCart = createCartDoc(items);
-      return savedCart;
-    });
+    cartCreateMock.mockImplementation(
+      ({ items }: { items: CartItemFixture[] }) => {
+        savedCart = createCartDoc(items);
+        return Promise.resolve(savedCart);
+      },
+    );
     productFindOneMock.mockReturnValue(queryResult(product));
     productFindMock.mockReturnValue(queryResult([product]));
     productUpdateOneMock.mockResolvedValue({ modifiedCount: 1 });
