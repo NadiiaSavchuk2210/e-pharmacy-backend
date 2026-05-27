@@ -132,15 +132,24 @@ export class CartService {
     }
   }
 
-  getDeliveryQuote(address: string, subtotal = 0): DeliveryQuoteResponse {
-    const { deliveryFee, additionalFee } = calculateDeliveryFees(
-      address,
-      subtotal,
-    );
-
-    return {
+  async getDeliveryQuote(
+    userId: string,
+    address: string,
+  ): Promise<DeliveryQuoteResponse> {
+    const { totalPrice: subtotal } = await this.getCart(userId);
+    const {
       deliveryFee,
       additionalFee,
+      freeDeliveryThreshold,
+      amountToFreeDelivery,
+    } = calculateDeliveryFees(address, subtotal);
+
+    return {
+      subtotal,
+      deliveryFee,
+      additionalFee,
+      freeDeliveryThreshold,
+      amountToFreeDelivery,
       message:
         'Delivery and extra fees are calculated based on shipping address',
     };

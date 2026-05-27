@@ -415,7 +415,7 @@ without the global success wrapper.
 | ------ | -------------------------- | ------------ | ------------------------------------------------ |
 | `GET`  | `/api/cart`                | Bearer token | Returns the current user's cart.                 |
 | `PUT`  | `/api/cart/update`         | Bearer token | Adds, updates, or removes one cart item.         |
-| `POST` | `/api/cart/delivery-quote` | Bearer token | Returns delivery and additional fee estimates.   |
+| `POST` | `/api/cart/delivery-quote` | Bearer token | Returns delivery and additional fee estimates for the current cart. |
 | `POST` | `/api/cart/checkout`       | Bearer token | Creates an order from the cart and clears cart.  |
 
 Recommended checkout flow:
@@ -468,17 +468,22 @@ Delivery quote body:
 
 ```json
 {
-  "address": "Kyiv, Main 1",
-  "subtotal": 25
+  "address": "Kyiv, Main 1"
 }
 ```
+
+Delivery quotes use the authenticated user's server-side cart subtotal. A
+legacy `subtotal` field is still accepted but ignored.
 
 Delivery quote response:
 
 ```json
 {
+  "subtotal": 25,
   "deliveryFee": 50,
   "additionalFee": 0,
+  "freeDeliveryThreshold": 500,
+  "amountToFreeDelivery": 475,
   "message": "Delivery and extra fees are calculated based on shipping address"
 }
 ```

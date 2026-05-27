@@ -24,5 +24,6 @@ export class DeliveryQuoteDto {
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? Number(value) : value,
   )
+  // Deprecated: quotes are calculated from the server-side cart.
   subtotal?: number;
 }
