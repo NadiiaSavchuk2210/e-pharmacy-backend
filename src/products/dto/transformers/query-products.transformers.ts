@@ -1,5 +1,5 @@
 import { type TransformFnParams } from 'class-transformer';
-import { PRODUCT_CATEGORIES } from '../products.types';
+import { PRODUCT_CATEGORIES } from '../../products.types';
 
 export function trimQueryValue({
   value,

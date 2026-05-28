@@ -20,15 +20,15 @@ import {
   buildAtomicStockDecrementUpdate,
   buildManyProductsLookup,
   buildSingleProductLookup,
+  calculateDiscountedPrice,
   calculateDeliveryFees,
   getCanonicalProductId,
-  parsePrice,
   parseStock,
   roundMoney,
   serializeProduct,
   toCartItemRecords,
   updateCartItems,
-} from './cart.helpers';
+} from './helpers/cart.helpers';
 import { Cart, type CartDocument } from './schemas/cart.schema';
 import {
   Order,
@@ -206,7 +206,7 @@ export class CartService {
 
       assertEnoughStock(product, item.quantity);
 
-      const price = parsePrice(product.price);
+      const price = calculateDiscountedPrice(product);
 
       return {
         product,
@@ -304,7 +304,8 @@ export class CartService {
     );
     const totalPrice = roundMoney(
       responseItems.reduce(
-        (total, item) => total + parsePrice(item.product.price) * item.quantity,
+        (total, item) =>
+          total + calculateDiscountedPrice(item.product) * item.quantity,
         0,
       ),
     );

@@ -75,9 +75,17 @@ src/
     utils/                        Shared helpers
   config/                         Environment validation
   cart/                           Cart, checkout, and delivery quote module
+    dto/                          Cart request DTOs
+    helpers/                      Cart pricing, lookup, stock, and response helpers
+    schemas/                      Cart and order Mongoose schemas
+    types/                        Cart service/response types
   customer-reviews/               Customer review module
   orders/                         Order history and status module
   products/                       Product catalog module
+    dto/                          Product request/query DTOs
+      transformers/               Product DTO transform helpers
+      validators/                 Product DTO custom validators
+    schemas/                      Product Mongoose schema
   stores/                         Pharmacy store module
   token-blacklist/                Access token revocation service
   user/                           Authentication and user profile module
@@ -170,10 +178,12 @@ All endpoints are prefixed with `/api`.
 
 ### Products
 
-| Method | Endpoint            | Auth | Description                                 |
-| ------ | ------------------- | ---- | ------------------------------------------- |
-| `GET`  | `/api/products`     | No   | Returns products sorted by name.            |
-| `GET`  | `/api/products/:id` | No   | Returns one product by public product `id`. |
+| Method  | Endpoint            | Auth | Description                                 |
+| ------- | ------------------- | ---- | ------------------------------------------- |
+| `POST`  | `/api/products`     | No   | Creates one product.                        |
+| `GET`   | `/api/products`     | No   | Returns products sorted by name.            |
+| `GET`   | `/api/products/:id` | No   | Returns one product by public product `id`. |
+| `PATCH` | `/api/products/:id` | No   | Updates one product by public product `id`. |
 
 Product query parameters:
 
@@ -195,6 +205,11 @@ curl "http://localhost:3000/api/products?category=Medicine&discount=70"
 curl "http://localhost:3000/api/products/product-001"
 ```
 
+Product create/update bodies may include reviewed rich description data:
+`description`, `descriptionSections`, and `sourceUrl`. The API stores and
+returns these fields from MongoDB; it does not generate medical description
+text during requests.
+
 Product list response:
 
 ```json
@@ -208,7 +223,15 @@ Product list response:
       "stock": "In Stock",
       "price": "12.99",
       "discount": 70,
-      "category": "Medicine"
+      "category": "Medicine",
+      "description": "Reviewed product description.",
+      "descriptionSections": [
+        {
+          "title": "Overview",
+          "body": "Reviewed section text."
+        }
+      ],
+      "sourceUrl": "https://example.com/source"
     }
   ],
   "meta": {
@@ -231,28 +254,36 @@ Product fields:
   "stock": "In Stock",
   "price": "12.99",
   "discount": 70,
-  "category": "Medicine"
+  "category": "Medicine",
+  "description": "Reviewed product description.",
+  "descriptionSections": [
+    {
+      "title": "Overview",
+      "body": "Reviewed section text."
+    }
+  ],
+  "sourceUrl": "https://example.com/source"
 }
 ```
 
 ### Stores
 
-| Method | Endpoint                     | Auth | Description                                                        |
-| ------ | ---------------------------- | ---- | ------------------------------------------------------------------ |
-| `GET`  | `/api/stores`                | No   | Returns pharmacies sorted by name.                                 |
-| `GET`  | `/api/stores/nearest`        | No   | Returns nearest pharmacies sorted by rating descending, then name. |
-| `GET`  | `/api/stores/random-nearest` | No   | Returns random nearest pharmacies from the database.               |
+| Method | Endpoint                     | Auth | Description                                                                                |
+| ------ | ---------------------------- | ---- | ------------------------------------------------------------------------------------------ |
+| `GET`  | `/api/stores`                | No   | Returns pharmacies sorted by name.                                                         |
+| `GET`  | `/api/stores/nearest`        | No   | Returns nearest pharmacies sorted by rating descending, then name.                         |
+| `GET`  | `/api/stores/random-nearest` | No   | Returns random nearest pharmacies from the database.                                       |
 | `GET`  | `/api/stores/:id`            | No   | Returns one store from `pharmacies` or `nearest_pharmacies` by public `id` or Mongo `_id`. |
 
 Store query parameters:
 
-| Endpoint                     | Parameter | Default | Rules                                                                                         |
-| ---------------------------- | --------- | ------- | --------------------------------------------------------------------------------------------- |
+| Endpoint                     | Parameter | Default | Rules                                                                                                                       |
+| ---------------------------- | --------- | ------- | --------------------------------------------------------------------------------------------------------------------------- |
 | `/api/stores`                | `limit`   | `9`     | Integer from `1` to `100`. Controls pharmacies per page. Use `limit=6&random=true` for the home page medicine stores block. |
-| `/api/stores`                | `page`    | `1`     | Integer from `1`. Controls the page number when `random` is not enabled.                      |
-| `/api/stores`                | `random`  | `false` | Boolean. When `true`, returns a random sample from the pharmacies collection.                 |
-| `/api/stores/nearest`        | `limit`   | `10`    | Integer from `1` to `100`.                                                                    |
-| `/api/stores/random-nearest` | `limit`   | `6`     | Integer from `1` to `100`. Controls the random sample size.                                   |
+| `/api/stores`                | `page`    | `1`     | Integer from `1`. Controls the page number when `random` is not enabled.                                                    |
+| `/api/stores`                | `random`  | `false` | Boolean. When `true`, returns a random sample from the pharmacies collection.                                               |
+| `/api/stores/nearest`        | `limit`   | `10`    | Integer from `1` to `100`.                                                                                                  |
+| `/api/stores/random-nearest` | `limit`   | `6`     | Integer from `1` to `100`. Controls the random sample size.                                                                 |
 
 Examples:
 
@@ -411,12 +442,12 @@ fetch('https://e-pharmacy-backend-z5z2.onrender.com/api/user/login', {
 All cart endpoints require `Authorization: Bearer <token>` and return raw data
 without the global success wrapper.
 
-| Method | Endpoint                   | Auth         | Description                                      |
-| ------ | -------------------------- | ------------ | ------------------------------------------------ |
-| `GET`  | `/api/cart`                | Bearer token | Returns the current user's cart.                 |
-| `PUT`  | `/api/cart/update`         | Bearer token | Adds, updates, or removes one cart item.         |
+| Method | Endpoint                   | Auth         | Description                                                         |
+| ------ | -------------------------- | ------------ | ------------------------------------------------------------------- |
+| `GET`  | `/api/cart`                | Bearer token | Returns the current user's cart.                                    |
+| `PUT`  | `/api/cart/update`         | Bearer token | Adds, updates, or removes one cart item.                            |
 | `POST` | `/api/cart/delivery-quote` | Bearer token | Returns delivery and additional fee estimates for the current cart. |
-| `POST` | `/api/cart/checkout`       | Bearer token | Creates an order from the cart and clears cart.  |
+| `POST` | `/api/cart/checkout`       | Bearer token | Creates an order from the cart and clears cart.                     |
 
 Recommended checkout flow:
 
@@ -463,6 +494,10 @@ Cart response:
   "totalPrice": 25
 }
 ```
+
+Cart totals, delivery quote subtotal, and checkout order totals use the
+server-side product price after applying the stored product `discount` when it
+is present.
 
 Delivery quote body:
 
@@ -551,7 +586,7 @@ Checkout troubleshooting:
 
 Cart implementation notes:
 
-- Cart-only pure helpers live in `src/cart/cart.helpers.ts`.
+- Cart-only pure helpers live in `src/cart/helpers/cart.helpers.ts`.
 - Shared order response types live in `src/common/types/order-response.types.ts`.
 - Shared order and shipping serializers live in
   `src/common/utils/order-response.util.ts`.
@@ -561,10 +596,10 @@ Cart implementation notes:
 All order endpoints require `Authorization: Bearer <token>` and return raw data
 without the global success wrapper.
 
-| Method  | Endpoint                 | Auth         | Description                              |
-| ------- | ------------------------ | ------------ | ---------------------------------------- |
-| `GET`   | `/api/orders`            | Bearer token | Returns current user's order history.    |
-| `PATCH` | `/api/orders/:id/status` | Bearer token | Updates one order status when allowed.   |
+| Method  | Endpoint                 | Auth         | Description                            |
+| ------- | ------------------------ | ------------ | -------------------------------------- |
+| `GET`   | `/api/orders`            | Bearer token | Returns current user's order history.  |
+| `PATCH` | `/api/orders/:id/status` | Bearer token | Updates one order status when allowed. |
 
 Order list response:
 
@@ -610,12 +645,12 @@ Update order status body:
 
 Allowed status transitions:
 
-| Current     | Allowed next statuses      |
-| ----------- | -------------------------- |
-| `pending`   | `paid`, `cancelled`        |
-| `paid`      | `completed`, `cancelled`   |
-| `completed` | none                       |
-| `cancelled` | none                       |
+| Current     | Allowed next statuses    |
+| ----------- | ------------------------ |
+| `pending`   | `paid`, `cancelled`      |
+| `paid`      | `completed`, `cancelled` |
+| `completed` | none                     |
+| `cancelled` | none                     |
 
 ## Response Format
 
@@ -666,15 +701,15 @@ Common errors:
 
 ## Database Collections
 
-| Collection           | Used by               | Notes                                      |
-| -------------------- | --------------------- | ------------------------------------------ |
-| `products`           | Product catalog       | Indexed by category/name and discount.     |
-| `pharmacies`         | Store listing         | Indexed by name and public id.             |
-| `nearest_pharmacies` | Nearest store listing | Indexed by rating/name and public id.      |
-| `reviews`            | Customer reviews      | Indexed by creation date.                  |
-| `users`              | Authentication        | Stores password hashes, not raw passwords. |
-| `carts`              | Cart module           | Stores one cart per authenticated user.    |
-| `orders`             | Orders module         | Stores checkout records and statuses.      |
+| Collection           | Used by               | Notes                                                    |
+| -------------------- | --------------------- | -------------------------------------------------------- |
+| `products`           | Product catalog       | Unique public id; indexed by category/name and discount. |
+| `pharmacies`         | Store listing         | Indexed by name and public id.                           |
+| `nearest_pharmacies` | Nearest store listing | Indexed by rating/name and public id.                    |
+| `reviews`            | Customer reviews      | Indexed by creation date.                                |
+| `users`              | Authentication        | Stores password hashes, not raw passwords.               |
+| `carts`              | Cart module           | Stores one cart per authenticated user.                  |
+| `orders`             | Orders module         | Stores checkout records and statuses.                    |
 
 ## Available Scripts
 

@@ -2,7 +2,9 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { escapeRegex } from '../common/utils/regex.util';
+import { CreateProductDto } from './dto/create-product.dto';
 import { QueryProductsDto } from './dto/query-products.dto';
+import { UpdateProductDto } from './dto/update-product.dto';
 import { Product, type ProductDocument } from './schemas/product.schema';
 
 type ProductsPage = {
@@ -21,6 +23,12 @@ export class ProductsService {
     @InjectModel(Product.name)
     private readonly productModel: Model<ProductDocument>,
   ) {}
+
+  async create(createProductDto: CreateProductDto): Promise<Product> {
+    const product = await this.productModel.create(createProductDto);
+
+    return product.toObject();
+  }
 
   async findAll(query: QueryProductsDto): Promise<ProductsPage> {
     const { category, discount, name, limit = 9, page = 1 } = query;
@@ -71,6 +79,27 @@ export class ProductsService {
 
   async findOne(id: string) {
     const product = await this.productModel.findOne({ id }).lean();
+
+    if (!product) throw new NotFoundException('Product not found');
+    return product;
+  }
+
+  async update(
+    id: string,
+    updateProductDto: UpdateProductDto,
+  ): Promise<Product> {
+    const product = await this.productModel
+      .findOneAndUpdate(
+        { id },
+        {
+          $set: updateProductDto,
+        },
+        {
+          new: true,
+          runValidators: true,
+        },
+      )
+      .lean<Product>();
 
     if (!product) throw new NotFoundException('Product not found');
     return product;
