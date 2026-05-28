@@ -12,7 +12,7 @@ export class CartItem {
   quantity: number;
 }
 
-export const CartItemSchema = SchemaFactory.createForClass(CartItem);
+const CartItemSchema = SchemaFactory.createForClass(CartItem);
 
 @Schema({
   collection: 'carts',

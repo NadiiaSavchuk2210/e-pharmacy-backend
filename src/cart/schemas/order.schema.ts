@@ -23,10 +23,10 @@ export class OrderItem {
   total: number;
 }
 
-export const OrderItemSchema = SchemaFactory.createForClass(OrderItem);
+const OrderItemSchema = SchemaFactory.createForClass(OrderItem);
 
 @Schema({ _id: false })
-export class ShippingInfo {
+class ShippingInfo {
   @Prop({ required: true, trim: true })
   name: string;
 
@@ -40,7 +40,7 @@ export class ShippingInfo {
   address: string;
 }
 
-export const ShippingInfoSchema = SchemaFactory.createForClass(ShippingInfo);
+const ShippingInfoSchema = SchemaFactory.createForClass(ShippingInfo);
 
 @Schema({
   collection: 'orders',

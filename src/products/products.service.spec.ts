@@ -5,16 +5,20 @@ import { Product } from './schemas/product.schema';
 
 describe('ProductsService', () => {
   let service: ProductsService;
+  let createMock: jest.Mock;
   let findMock: jest.Mock;
   let findOneMock: jest.Mock;
+  let findOneAndUpdateMock: jest.Mock;
   let countDocumentsMock: jest.Mock;
   let sortMock: jest.Mock;
   let skipMock: jest.Mock;
   let limitMock: jest.Mock;
 
   beforeEach(async () => {
+    createMock = jest.fn();
     findMock = jest.fn();
     findOneMock = jest.fn();
+    findOneAndUpdateMock = jest.fn();
     countDocumentsMock = jest.fn();
     sortMock = jest.fn();
     skipMock = jest.fn();
@@ -26,8 +30,10 @@ describe('ProductsService', () => {
         {
           provide: getModelToken(Product.name),
           useValue: {
+            create: createMock,
             find: findMock,
             findOne: findOneMock,
+            findOneAndUpdate: findOneAndUpdateMock,
             countDocuments: countDocumentsMock,
           },
         },
@@ -39,6 +45,33 @@ describe('ProductsService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  it('creates products with reviewed rich description data', async () => {
+    const product = {
+      id: 'product-001',
+      photo: 'photo.png',
+      name: 'Aspirin',
+      suppliers: 'Acme Pharma',
+      stock: '5',
+      price: '12.50',
+      category: 'Medicine' as const,
+      description: 'Reviewed product description.',
+      descriptionSections: [
+        {
+          title: 'Overview',
+          body: 'Reviewed overview text.',
+        },
+      ],
+      sourceUrl: 'https://example.com/source',
+    };
+
+    createMock.mockResolvedValue({
+      toObject: jest.fn().mockReturnValue(product),
+    });
+
+    await expect(service.create(product)).resolves.toEqual(product);
+    expect(createMock).toHaveBeenCalledWith(product);
   });
 
   it('builds case-insensitive independent filters for category and name', async () => {
@@ -238,5 +271,62 @@ describe('ProductsService', () => {
     expect(skipMock).toHaveBeenCalledWith(9);
     expect(limitMock).toHaveBeenCalledWith(9);
     expect(result.meta.totalItems).toBe(11);
+  });
+
+  it('returns DB-backed rich product description fields for one product', async () => {
+    const product = {
+      id: 'product-001',
+      name: 'Aspirin',
+      category: 'Medicine',
+      description: 'Reviewed product description.',
+      descriptionSections: [
+        {
+          title: 'Overview',
+          body: 'Reviewed overview text.',
+        },
+      ],
+      sourceUrl: 'https://example.com/source',
+    };
+    const leanMock = jest.fn().mockResolvedValue(product);
+
+    findOneMock.mockReturnValue({ lean: leanMock });
+
+    await expect(service.findOne('product-001')).resolves.toEqual(product);
+    expect(findOneMock).toHaveBeenCalledWith({ id: 'product-001' });
+  });
+
+  it('updates products with runValidators enabled', async () => {
+    const updatedProduct = {
+      id: 'product-001',
+      name: 'Aspirin',
+      descriptionSections: [
+        {
+          title: 'Usage',
+          body: 'Reviewed usage text.',
+        },
+      ],
+    };
+    const leanMock = jest.fn().mockResolvedValue(updatedProduct);
+
+    findOneAndUpdateMock.mockReturnValue({ lean: leanMock });
+
+    await expect(
+      service.update('product-001', {
+        descriptionSections: updatedProduct.descriptionSections,
+      }),
+    ).resolves.toEqual(updatedProduct);
+
+    expect(findOneAndUpdateMock).toHaveBeenCalledWith(
+      { id: 'product-001' },
+      {
+        $set: {
+          descriptionSections: updatedProduct.descriptionSections,
+        },
+      },
+      {
+        new: true,
+        runValidators: true,
+      },
+    );
   });
 });

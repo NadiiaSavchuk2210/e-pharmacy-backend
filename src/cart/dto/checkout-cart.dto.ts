@@ -14,7 +14,7 @@ import {
 const trimString = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
 
-export class ShippingInfoDto {
+class ShippingInfoDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(100)

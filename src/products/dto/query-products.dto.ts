@@ -15,7 +15,7 @@ import {
   parsePage,
   normalizeCategory,
   trimQueryValue,
-} from './query-products.transformers';
+} from './transformers/query-products.transformers';
 
 export class QueryProductsDto {
   @IsOptional()

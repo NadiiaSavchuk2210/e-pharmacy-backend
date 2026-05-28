@@ -30,11 +30,6 @@ export type AuthSession = AuthResponse & {
   refreshTokenExpiresIn: number;
 };
 
-export type AuthError = {
-  message: string;
-  code: 'INVALID_CREDENTIALS' | 'TOKEN_EXPIRED' | 'UNAUTHORIZED';
-};
-
 export interface AuthenticatedRequest extends Request {
   user: AuthenticatedUser;
   token: string;

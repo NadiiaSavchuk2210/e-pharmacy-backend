@@ -185,6 +185,42 @@ describe('CartService', () => {
     });
   });
 
+  it('uses discounted product prices for cart totals', async () => {
+    cartFindOneMock.mockReturnValue(
+      leanResult({
+        items: [
+          {
+            productId: 'product-1',
+            quantity: 2,
+          },
+        ],
+      }),
+    );
+    productFindMock.mockReturnValue(
+      leanResult([
+        {
+          ...product,
+          discount: 20,
+        },
+      ]),
+    );
+
+    await expect(service.getCart('user-1')).resolves.toMatchObject({
+      items: [
+        {
+          product: {
+            id: 'product-1',
+            price: '12.50',
+            discount: 20,
+          },
+          quantity: 2,
+        },
+      ],
+      totalItems: 2,
+      totalPrice: 20,
+    });
+  });
+
   it('rejects quantities larger than available stock', async () => {
     productFindOneMock.mockReturnValue(
       leanResult({
@@ -361,6 +397,98 @@ describe('CartService', () => {
         status: 'pending',
         createdAt: '2026-05-25T10:00:00.000Z',
       },
+    });
+  });
+
+  it('creates checkout order totals with discounted product prices', async () => {
+    const cartDoc = createCartDoc([
+      {
+        productId: 'product-1',
+        quantity: 2,
+      },
+    ]);
+    const createdAt = new Date('2026-05-25T10:00:00.000Z');
+    const discountedProduct = {
+      ...product,
+      discount: '20%',
+    };
+
+    cartFindOneMock.mockReturnValue({
+      session: jest.fn().mockResolvedValue(cartDoc),
+    });
+    productFindMock.mockReturnValue(leanResult([discountedProduct]));
+    orderCreateMock.mockResolvedValue([
+      {
+        _id: 'order-1',
+        items: [
+          {
+            productId: 'product-1',
+            name: 'Aspirin',
+            price: 10,
+            quantity: 2,
+            total: 20,
+          },
+        ],
+        shippingInfo: {
+          name: 'Test User',
+          email: 'test@example.com',
+          phone: '+380991112233',
+          address: 'Kyiv, Main 1',
+        },
+        paymentMethod: 'cash_on_delivery',
+        subtotal: 20,
+        deliveryFee: 50,
+        additionalFee: 0,
+        total: 70,
+        status: 'pending',
+        createdAt,
+      },
+    ]);
+    productUpdateOneMock.mockResolvedValue({ modifiedCount: 1 });
+
+    const result = await service.checkout('user-1', {
+      shippingInfo: {
+        name: 'Test User',
+        email: 'test@example.com',
+        phone: '+380991112233',
+        address: 'Kyiv, Main 1',
+      },
+      paymentMethod: 'cash_on_delivery',
+      comment: '',
+    });
+
+    expect(orderCreateMock).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          items: [
+            {
+              productId: 'product-1',
+              name: 'Aspirin',
+              price: 10,
+              quantity: 2,
+              total: 20,
+            },
+          ],
+          subtotal: 20,
+          deliveryFee: 50,
+          total: 70,
+        }),
+      ],
+      {
+        session,
+      },
+    );
+    expect(result.order).toMatchObject({
+      subtotal: 20,
+      total: 70,
+      items: [
+        {
+          productId: 'product-1',
+          price: 10,
+          quantity: 2,
+          total: 20,
+        },
+      ],
     });
   });
 
