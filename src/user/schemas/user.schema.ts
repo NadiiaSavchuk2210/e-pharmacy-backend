@@ -40,6 +40,12 @@ export class User {
     trim: true,
   })
   role: string;
+
+  @Prop({
+    required: false,
+    trim: true,
+  })
+  avatar?: string;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

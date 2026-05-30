@@ -28,6 +28,7 @@ curl https://e-pharmacy-backend-z5z2.onrender.com/api
 
 - Product catalog with filtering by category, discount, partial name search,
   sorting, and bounded result limits.
+- Product-specific reviews and rating summaries fetched by product id.
 - Store listing for pharmacies, random store samples, nearest pharmacies, and
   store details.
 - Customer review listing sorted by newest first.
@@ -86,6 +87,7 @@ src/
       transformers/               Product DTO transform helpers
       validators/                 Product DTO custom validators
     schemas/                      Product Mongoose schema
+  product-reviews/                Product-specific review module
   stores/                         Pharmacy store module
   token-blacklist/                Access token revocation service
   user/                           Authentication and user profile module
@@ -178,12 +180,15 @@ All endpoints are prefixed with `/api`.
 
 ### Products
 
-| Method  | Endpoint            | Auth | Description                                 |
-| ------- | ------------------- | ---- | ------------------------------------------- |
-| `POST`  | `/api/products`     | No   | Creates one product.                        |
-| `GET`   | `/api/products`     | No   | Returns products sorted by name.            |
-| `GET`   | `/api/products/:id` | No   | Returns one product by public product `id`. |
-| `PATCH` | `/api/products/:id` | No   | Updates one product by public product `id`. |
+| Method  | Endpoint                            | Auth           | Description                                     |
+| ------- | ----------------------------------- | -------------- | ----------------------------------------------- |
+| `POST`  | `/api/products`                     | No             | Creates one product.                            |
+| `GET`   | `/api/products`                     | No             | Returns products sorted by name.                |
+| `GET`   | `/api/products/:id`                 | No             | Returns one product by public product `id`.     |
+| `PATCH` | `/api/products/:id`                 | No             | Updates one product by public product `id`.     |
+| `GET`   | `/api/products/:id/reviews`         | No             | Returns product reviews sorted newest first.    |
+| `POST`  | `/api/products/:id/reviews`         | Optional token | Creates one review for the product.             |
+| `GET`   | `/api/products/:id/reviews/summary` | No             | Returns average rating and rating distribution. |
 
 Product query parameters:
 
@@ -195,6 +200,13 @@ Product query parameters:
 | `limit`    | number | `9`     | Integer from `1` to `100`. Controls products per page.                                                                                            |
 | `page`     | number | `1`     | Integer from `1`. Controls the page number.                                                                                                       |
 
+Product review query parameters:
+
+| Parameter | Type   | Default | Rules                                                 |
+| --------- | ------ | ------- | ----------------------------------------------------- |
+| `limit`   | number | `50`    | Integer from `1` to `100`. Controls reviews per page. |
+| `page`    | number | `1`     | Integer from `1`. Controls the page number.           |
+
 Examples:
 
 ```bash
@@ -203,6 +215,8 @@ curl "http://localhost:3000/api/products?category=Medicine&limit=9&page=2"
 curl "http://localhost:3000/api/products?name=aspirin"
 curl "http://localhost:3000/api/products?category=Medicine&discount=70"
 curl "http://localhost:3000/api/products/product-001"
+curl "http://localhost:3000/api/products/product-001/reviews?limit=10&page=1"
+curl "http://localhost:3000/api/products/product-001/reviews/summary"
 ```
 
 Product create/update bodies may include reviewed rich description data:
@@ -263,6 +277,61 @@ Product fields:
     }
   ],
   "sourceUrl": "https://example.com/source"
+}
+```
+
+Product review create body:
+
+```json
+{
+  "authorName": "Leroy Jenkins",
+  "authorAvatar": "https://example.com/avatar.png",
+  "rating": 4,
+  "comment": "I've been using this product for a few weeks."
+}
+```
+
+If a valid access token is sent, the API uses the authenticated user's id, name,
+and avatar when available. Anonymous review creation requires `authorName`.
+When no avatar is available, the API stores a fallback avatar image URL.
+
+Product review list response data:
+
+```json
+{
+  "items": [
+    {
+      "id": "66544c51aa4ad43070b1df11",
+      "productId": "product-001",
+      "authorName": "Leroy Jenkins",
+      "authorAvatar": "https://example.com/avatar.png",
+      "rating": 4,
+      "comment": "I've been using this product for a few weeks.",
+      "createdAt": "2026-05-27T10:00:00.000Z"
+    }
+  ],
+  "meta": {
+    "totalItems": 1,
+    "currentPage": 1,
+    "perPage": 50,
+    "totalPages": 1
+  }
+}
+```
+
+Product review summary response:
+
+```json
+{
+  "averageRating": 4,
+  "totalReviews": 3,
+  "ratingBreakdown": {
+    "1": 0,
+    "2": 0,
+    "3": 1,
+    "4": 1,
+    "5": 1
+  }
 }
 ```
 
@@ -707,6 +776,7 @@ Common errors:
 | `pharmacies`         | Store listing         | Indexed by name and public id.                           |
 | `nearest_pharmacies` | Nearest store listing | Indexed by rating/name and public id.                    |
 | `reviews`            | Customer reviews      | Indexed by creation date.                                |
+| `product_reviews`    | Product reviews       | Stores product/user ObjectId refs and rating indexes.    |
 | `users`              | Authentication        | Stores password hashes, not raw passwords.               |
 | `carts`              | Cart module           | Stores one cart per authenticated user.                  |
 | `orders`             | Orders module         | Stores checkout records and statuses.                    |

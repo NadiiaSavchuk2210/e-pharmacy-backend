@@ -6,6 +6,7 @@ export type AuthenticatedUser = {
   name: string;
   phone: string;
   role: string;
+  avatar?: string;
   type: 'access' | 'refresh';
   exp: number;
 };
@@ -16,6 +17,7 @@ export type SafeUser = {
   email: string;
   phone: string;
   role: string;
+  avatar?: string;
 };
 
 export type AuthResponse = {
@@ -33,5 +35,11 @@ export type AuthSession = AuthResponse & {
 export interface AuthenticatedRequest extends Request {
   user: AuthenticatedUser;
   token: string;
+  cookies: Record<string, string | undefined>;
+}
+
+export interface OptionalAuthenticatedRequest extends Request {
+  user?: AuthenticatedUser;
+  token?: string;
   cookies: Record<string, string | undefined>;
 }

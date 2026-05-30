@@ -17,6 +17,7 @@ import { LoginUserDto } from './dto/login-user.dto';
 import { RegisterUserDto } from './dto/register-user.dto';
 import { User, type UserDocument } from './schemas/user.schema';
 import { TokenBlacklistService } from '../token-blacklist/token-blacklist.service';
+import { getOptionalAvatar } from './helpers/user.helpers';
 import type {
   AuthenticatedUser,
   AuthSession,
@@ -82,6 +83,7 @@ export class UserService {
       email: authenticatedUser.email,
       phone: authenticatedUser.phone,
       role: authenticatedUser.role,
+      avatar: getOptionalAvatar(authenticatedUser),
     };
   }
 
@@ -90,6 +92,7 @@ export class UserService {
       id: authenticatedUser.sub,
       name: authenticatedUser.name,
       email: authenticatedUser.email,
+      avatar: getOptionalAvatar(authenticatedUser),
     };
   }
 
@@ -196,6 +199,7 @@ export class UserService {
       name: user.name,
       phone: user.phone,
       role: user.role,
+      avatar: getOptionalAvatar(user),
     };
     const authToken = this.createToken({
       ...basePayload,
@@ -215,6 +219,7 @@ export class UserService {
         email: user.email,
         phone: user.phone,
         role: user.role,
+        avatar: getOptionalAvatar(user),
       },
       token: authToken,
       refreshToken,
