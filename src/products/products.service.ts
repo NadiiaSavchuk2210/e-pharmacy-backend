@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { escapeRegex } from '../common/utils/regex.util';
+import { FrontendRevalidationService } from '../revalidation/frontend-revalidation.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { QueryProductsDto } from './dto/query-products.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -22,12 +23,16 @@ export class ProductsService {
   constructor(
     @InjectModel(Product.name)
     private readonly productModel: Model<ProductDocument>,
+    private readonly frontendRevalidationService: FrontendRevalidationService,
   ) {}
 
   async create(createProductDto: CreateProductDto): Promise<Product> {
     const product = await this.productModel.create(createProductDto);
+    const createdProduct = product.toObject();
 
-    return product.toObject();
+    await this.frontendRevalidationService.notify({ type: 'product.created' });
+
+    return createdProduct;
   }
 
   async findAll(query: QueryProductsDto): Promise<ProductsPage> {
@@ -102,6 +107,12 @@ export class ProductsService {
       .lean<Product>();
 
     if (!product) throw new NotFoundException('Product not found');
+
+    await this.frontendRevalidationService.notify({
+      type: 'product.updated',
+      id: product.id,
+    });
+
     return product;
   }
 }

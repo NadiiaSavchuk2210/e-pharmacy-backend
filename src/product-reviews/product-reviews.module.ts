@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Product, ProductSchema } from '../products/schemas/product.schema';
+import { RevalidationModule } from '../revalidation/revalidation.module';
 import { OptionalAuthGuard } from '../user/guards/optional-auth.guard';
 import { UserModule } from '../user/user.module';
 import { ProductReviewsController } from './product-reviews.controller';
@@ -13,6 +14,7 @@ import {
 @Module({
   imports: [
     UserModule,
+    RevalidationModule,
     MongooseModule.forFeature([
       { name: Product.name, schema: ProductSchema },
       { name: ProductReview.name, schema: ProductReviewSchema },

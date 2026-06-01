@@ -5,6 +5,7 @@ import { validate } from 'class-validator';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Types } from 'mongoose';
 import { Product } from '../products/schemas/product.schema';
+import { FrontendRevalidationService } from '../revalidation/frontend-revalidation.service';
 import { CreateProductReviewDto } from './dto/create-product-review.dto';
 import { ProductReviewsService } from './product-reviews.service';
 import { ProductReview } from './schemas/product-review.schema';
@@ -21,6 +22,7 @@ describe('ProductReviewsService', () => {
   let reviewCountDocumentsMock: jest.Mock;
   let reviewCreateMock: jest.Mock;
   let reviewAggregateMock: jest.Mock;
+  let revalidationNotifyMock: jest.Mock;
 
   const productObjectId = new Types.ObjectId('66544c51aa4ad43070b1df10');
   const product = {
@@ -69,6 +71,7 @@ describe('ProductReviewsService', () => {
     reviewCountDocumentsMock = jest.fn();
     reviewCreateMock = jest.fn();
     reviewAggregateMock = jest.fn();
+    revalidationNotifyMock = jest.fn().mockResolvedValue(undefined);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -86,6 +89,12 @@ describe('ProductReviewsService', () => {
           provide: getModelToken(Product.name),
           useValue: {
             findOne: productFindOneMock,
+          },
+        },
+        {
+          provide: FrontendRevalidationService,
+          useValue: {
+            notify: revalidationNotifyMock,
           },
         },
       ],
@@ -262,6 +271,10 @@ describe('ProductReviewsService', () => {
       rating: 5,
       comment: 'Helpful and accurate.',
       createdAt: '2026-05-28T11:00:00.000Z',
+    });
+    expect(revalidationNotifyMock).toHaveBeenCalledWith({
+      type: 'product-review.created',
+      productId: 'product-1',
     });
   });
 
