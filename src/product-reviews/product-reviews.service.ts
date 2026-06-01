@@ -10,6 +10,7 @@ import {
   Product,
   type ProductDocument,
 } from '../products/schemas/product.schema';
+import { FrontendRevalidationService } from '../revalidation/frontend-revalidation.service';
 import { CreateProductReviewDto } from './dto/create-product-review.dto';
 import {
   ProductReview,
@@ -53,6 +54,7 @@ export class ProductReviewsService {
     private readonly productReviewModel: Model<ProductReviewDocument>,
     @InjectModel(Product.name)
     private readonly productModel: Model<ProductDocument>,
+    private readonly frontendRevalidationService: FrontendRevalidationService,
   ) {}
 
   async findByProductId(
@@ -115,7 +117,14 @@ export class ProductReviewsService {
       status: 'published',
     });
 
-    return this.toResponse(createdReview.toObject(), product.id);
+    const response = this.toResponse(createdReview.toObject(), product.id);
+
+    await this.frontendRevalidationService.notify({
+      type: 'product-review.created',
+      productId: product.id,
+    });
+
+    return response;
   }
 
   async getSummary(productId: string): Promise<ProductReviewsSummary> {

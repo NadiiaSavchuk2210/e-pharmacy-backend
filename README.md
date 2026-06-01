@@ -39,6 +39,8 @@ curl https://e-pharmacy-backend-z5z2.onrender.com/api
 - Protected order history and order status updates with allowed transition
   checks.
 - Delivery quote calculation with a free-delivery threshold.
+- Frontend cache revalidation notifications after public catalog/review
+  mutations.
 - Access token authentication with `Authorization: Bearer <token>`.
 - Refresh token stored in an HTTP-only secure cookie.
 - Password hashing with Node.js `crypto.scrypt`.
@@ -88,6 +90,7 @@ src/
       validators/                 Product DTO custom validators
     schemas/                      Product Mongoose schema
   product-reviews/                Product-specific review module
+  revalidation/                   Frontend cache revalidation webhook client
   stores/                         Pharmacy store module
   token-blacklist/                Access token revocation service
   user/                           Authentication and user profile module
@@ -132,6 +135,8 @@ Optional variables:
 | `MONGODB_DB_NAME`        | Mongo URI default       | Database name to use from the MongoDB connection.          |
 | `AUTH_TOKEN_TTL`         | `86400`                 | Access token lifetime in seconds.                          |
 | `AUTH_REFRESH_TOKEN_TTL` | `604800`                | Refresh token lifetime in seconds when omitted at runtime. |
+| `FRONTEND_URL`           | unset                   | Frontend origin that exposes `POST /api/revalidate`.       |
+| `REVALIDATE_SECRET`      | unset                   | Shared secret sent only from backend to frontend.          |
 
 Example:
 
@@ -143,10 +148,25 @@ MONGODB_DB_NAME=e-pharmacy
 AUTH_TOKEN_SECRET=replace-with-a-long-random-secret
 AUTH_TOKEN_TTL=3600
 AUTH_REFRESH_TOKEN_TTL=2592000
+FRONTEND_URL=https://your-frontend-domain.com
+REVALIDATE_SECRET=replace-with-a-long-random-secret
 ```
 
 Keep MongoDB credentials in the backend environment only. Do not copy
 `MONGODB_URI` or database credentials into frontend `.env` files.
+Use the same `REVALIDATE_SECRET` in the frontend environment, but do not expose
+it to browser/client-side code.
+
+When `FRONTEND_URL` and `REVALIDATE_SECRET` are configured, successful backend
+mutations that affect public product or review data send a JSON event to:
+
+```text
+POST {FRONTEND_URL}/api/revalidate
+```
+
+The request includes `Content-Type: application/json` and
+`x-revalidate-secret: <REVALIDATE_SECRET>`. Failed frontend revalidation calls
+are logged and do not roll back the completed database mutation.
 
 Checkout uses MongoDB transactions in production. Local/non-production
 standalone MongoDB instances that do not support transactions fall back to a
@@ -809,6 +829,8 @@ npm run test:e2e       # Run E2E tests
 - Access token logout uses an in-memory blacklist. In a multi-instance or
   serverless deployment, move token revocation to a shared store such as Redis.
 - Use a strong `AUTH_TOKEN_SECRET` in every non-local environment.
+- Use a strong `REVALIDATE_SECRET` in every environment where frontend cache
+  revalidation is enabled.
 
 ## Deployment Notes
 
@@ -829,7 +851,9 @@ For Render or a similar Node.js host:
 3. Configure environment variables in the hosting dashboard.
 4. Set `CORS_ORIGIN` to the deployed frontend URL. Use a comma-separated list
    if local and deployed frontends both need access.
-5. Ensure the MongoDB provider allows connections from the hosting platform.
+5. Set `FRONTEND_URL` to the deployed frontend URL and configure the same
+   `REVALIDATE_SECRET` on both backend and frontend.
+6. Ensure the MongoDB provider allows connections from the hosting platform.
 
 ## Quality Checks
 

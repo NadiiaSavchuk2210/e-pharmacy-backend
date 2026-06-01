@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
+import { FrontendRevalidationService } from '../revalidation/frontend-revalidation.service';
 import { ProductsService } from './products.service';
 import { Product } from './schemas/product.schema';
 
@@ -10,6 +11,7 @@ describe('ProductsService', () => {
   let findOneMock: jest.Mock;
   let findOneAndUpdateMock: jest.Mock;
   let countDocumentsMock: jest.Mock;
+  let revalidationNotifyMock: jest.Mock;
   let sortMock: jest.Mock;
   let skipMock: jest.Mock;
   let limitMock: jest.Mock;
@@ -20,6 +22,7 @@ describe('ProductsService', () => {
     findOneMock = jest.fn();
     findOneAndUpdateMock = jest.fn();
     countDocumentsMock = jest.fn();
+    revalidationNotifyMock = jest.fn().mockResolvedValue(undefined);
     sortMock = jest.fn();
     skipMock = jest.fn();
     limitMock = jest.fn();
@@ -35,6 +38,12 @@ describe('ProductsService', () => {
             findOne: findOneMock,
             findOneAndUpdate: findOneAndUpdateMock,
             countDocuments: countDocumentsMock,
+          },
+        },
+        {
+          provide: FrontendRevalidationService,
+          useValue: {
+            notify: revalidationNotifyMock,
           },
         },
       ],
@@ -72,6 +81,9 @@ describe('ProductsService', () => {
 
     await expect(service.create(product)).resolves.toEqual(product);
     expect(createMock).toHaveBeenCalledWith(product);
+    expect(revalidationNotifyMock).toHaveBeenCalledWith({
+      type: 'product.created',
+    });
   });
 
   it('builds case-insensitive independent filters for category and name', async () => {
@@ -328,5 +340,9 @@ describe('ProductsService', () => {
         runValidators: true,
       },
     );
+    expect(revalidationNotifyMock).toHaveBeenCalledWith({
+      type: 'product.updated',
+      id: 'product-001',
+    });
   });
 });
